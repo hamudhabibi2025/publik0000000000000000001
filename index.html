@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ASKAB PSSI KEPULAUAN MENTAWAI</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="loader" class="loading-overlay">
+        <div class="spinner"></div>
+        <p>Memuat Data...</p>
+    </div>
+
+    <div id="app-container">
+        <header id="main-header" class="header-container">
+            </header>
+
+        <div class="search-bar-freeze">
+            <input type="text" id="global-search" placeholder="Cari Berita, Kompetisi, atau Klub..." oninput="filterContent(this.value)">
+        </div>
+
+        <main id="content-container">
+            </main>
+        
+        <div id="detail-modal" class="modal">
+            <div class="modal-content">
+                <span class="close-button" onclick="closeModal()">&times;</span>
+                <div id="modal-body">
+                    </div>
+            </div>
+        </div>
+    </div>
+
+    <nav id="bottom-nav">
+        <a href="#home" class="nav-item active" onclick="navigate('home')">
+            🏠 Home
+        </a>
+        <a href="#kompetisi" class="nav-item" onclick="navigate('kompetisi')">
+            ⚽ Kompetisi
+        </a>
+        <a href="#klub" class="nav-item" onclick="navigate('klub')">
+            🏆 Klub
+        </a>
+        <a href="#tentang" class="nav-item" onclick="navigate('tentang')">
+            ℹ️ Tentang
+        </a>
+    </nav>
+    
+    <script src="script.js"></script>
+</body>
+</html>
