@@ -101,7 +101,7 @@
     <script>
         // --- KONFIGURASI PENTING ---
         // GANTI DENGAN URL WEB APP ANDA YANG SUDAH DIDEPLOY
-        const API_URL = "https://script.google.com/macros/s/AKfycby3uWVoeBtbcY1oAjbkCNdRFT8ew7_VEtwe-WG8ka1OJqNUDj0GX4zdAwcI_nsexYNhFA/exec"; 
+        const API_URL = "[GANTI DENGAN URL WEB APP ANDA YANG SUDAH DIDEPLOY]"; 
         const SESSION_DURATION_MS = 30 * 60 * 1000; // 30 menit
         const MAX_CONTENT_LENGTH = 200; // Untuk ringkasan berita
 
@@ -124,6 +124,41 @@
         let carouselTrack;
 
         // --- UTILITY FUNCTIONS ---
+        
+        /**
+         * Mengubah data tanggal (Date object atau string YYYY-MM-DD) ke format Indonesia.
+         * Format: Hari, DD Bulan YYYY (contoh: Senin, 10 November 2025)
+         * @param {Date|string} dateInput Tanggal.
+         */
+        const formatDate = (dateInput) => {
+            if (!dateInput) return '-';
+
+            let date;
+            if (dateInput instanceof Date) {
+                date = dateInput;
+            } else {
+                // Menerima format YYYY-MM-DD (dari spreadsheet)
+                const parts = dateInput.split('-');
+                if (parts.length === 3) {
+                    // Gunakan new Date(tahun, bulan-1, hari) untuk menghindari masalah zona waktu
+                    date = new Date(parts[0], parts[1] - 1, parts[2]);
+                } else {
+                    date = new Date(dateInput);
+                }
+            }
+
+            if (isNaN(date.getTime())) return '-';
+            
+            const options = {
+                weekday: 'long', 
+                year: 'numeric', 
+                month: 'long', 
+                day: 'numeric' 
+            };
+            
+            // Format penuh Indonesia: Hari, DD Bulan YYYY
+            return date.toLocaleDateString('id-ID', options);
+        };
 
         /**
          * Mengubah teks menjadi slug sederhana untuk URL.
@@ -315,7 +350,7 @@
         const renderNewsCard = (item) => {
             const firstImage = item.gambar_1 || item.gambar_2 || item.gambar_3 || 'https://placehold.co/400x250/9ca3af/ffffff?text=NO+IMAGE';
             const summary = truncateText(item.isi_berita || '', 20); // 20 kata pertama
-            const date = item.tanggal ? new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+            const date = formatDate(item.tanggal);
 
             return `
                 <div class="bg-white rounded-xl shadow-lg overflow-hidden transition transform hover:scale-[1.01] cursor-pointer" onclick="showNewsModal('${item.id_berita}')">
@@ -344,7 +379,7 @@
             if (!detail) return;
 
             const images = [detail.gambar_1, detail.gambar_2, detail.gambar_3].filter(url => url && url.startsWith('http'));
-            const date = detail.tanggal ? new Date(detail.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+            const date = formatDate(detail.tanggal);
 
             let modalContent = `
                 <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl">
@@ -643,7 +678,7 @@
         };
 
         const renderCompetitionCard = (item) => {
-            const date = item.tanggal ? new Date(item.tanggal).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '-';
+            const date = formatDate(item.tanggal);
             const jenis = item.jenis_pertandingan || 'Pertandingan';
             const lokasi = item.lokasi || 'Tidak diketahui';
 
