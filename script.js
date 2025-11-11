@@ -4,6 +4,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbzOg72W2KRNKKeXU5L57tIW
 let appData = {};
 let currentView = 'home';
 let sessionTimer;
+let currentSliderIntervals = {}; // Untuk mengelola ID interval slider
 
 // --- UTILITIES ---
 
@@ -11,12 +12,10 @@ let sessionTimer;
 function formatIDDate(dateString) {
     const options = { year: 'numeric', month: 'long', day: 'numeric' };
     try {
-        // Cek jika string tanggal valid (bisa jadi kosong atau '-' dari sheet)
         if (!dateString || dateString === '-') return '-'; 
         return new Date(dateString).toLocaleDateString('id-ID', options);
     } catch (e) {
-        console.error("Gagal format tanggal:", e);
-        return dateString; // Kembali ke teks asli jika gagal
+        return dateString;
     }
 }
 
@@ -68,7 +67,7 @@ async function loadAllData() {
         // Inisialisasi tampilan
         renderHeader(appData.home.kepala_halaman, appData.home.org_name);
         
-        // Cek hash di URL untuk menentukan halaman awal
+        // Tentukan hash di URL untuk menentukan halaman awal
         const initialView = window.location.hash.substring(1) || 'home';
         navigate(initialView, false); // Jangan push state jika memuat awal
         
@@ -78,9 +77,7 @@ async function loadAllData() {
     } catch (e) {
         console.error("Gagal memuat data:", e);
         document.getElementById('content-container').innerHTML = `<p style="text-align:center; color:red; padding: 20px;">
-            🚨 Gagal memuat data dari API. Cek:
-            <br>1. URL Apps Script di file script.js sudah benar.
-            <br>2. Deployment Apps Script diatur ke "Who has access: Anyone".
+            🚨 Gagal memuat data dari API. Cek koneksi internet dan konfigurasi Apps Script Anda.
             <br>Detail Error: ${e.message}
         </p>`;
     } finally {
@@ -90,11 +87,12 @@ async function loadAllData() {
 
 // Timer 30 Menit
 function startSessionTimer() {
-    if (sessionTimer) clearTimeout(sessionTimer); // Gunakan clearTimeout untuk interval yang tidak berulang
-    const sessionDuration = 30 * 60 * 1000; // 30 menit dalam ms
+    if (sessionTimer) clearTimeout(sessionTimer);
+    const sessionDuration = 30 * 60 * 1000;
     
     sessionTimer = setTimeout(() => {
         alert("Waktu sesi Anda telah habis (30 menit). Halaman akan dimuat ulang.");
+        history.pushState(null, '', window.location.href); 
         window.location.reload();
     }, sessionDuration);
 }
@@ -104,16 +102,21 @@ function startSessionTimer() {
 
 // Mengganti konten utama dan memperbarui Navigasi
 function navigate(viewName, pushState = true) {
-    if (currentView === viewName && viewName !== 'home' && pushState) return; 
+    // Nonaktifkan semua interval slider saat berganti halaman
+    Object.values(currentSliderIntervals).forEach(clearInterval);
+    currentSliderIntervals = {};
+    
+    // Validasi viewName, default ke 'home'
+    const validViews = ['home', 'kompetisi', 'klub', 'tentang'];
+    viewName = validViews.includes(viewName) ? viewName : 'home';
+
     currentView = viewName;
     const container = document.getElementById('content-container');
     
     // Perbarui state browser untuk navigasi single-page
     if (pushState) {
         history.pushState({ view: viewName }, '', `#${viewName}`);
-    } else {
-        history.replaceState({ view: viewName }, '', `#${viewName}`);
-    }
+    } 
     
     // Perbarui navigasi bawah
     document.querySelectorAll('.nav-item').forEach(item => {
@@ -124,7 +127,9 @@ function navigate(viewName, pushState = true) {
     });
 
     // Reset pencarian saat pindah halaman
-    document.getElementById('global-search').value = '';
+    const searchInput = document.getElementById('global-search');
+    searchInput.value = '';
+    searchInput.oninput = () => filterContent(searchInput.value); // Pastikan filter terikat lagi
 
     // Render halaman yang diminta
     switch (viewName) {
@@ -140,18 +145,19 @@ function navigate(viewName, pushState = true) {
         case 'tentang':
             renderTentang(container);
             break;
-        default:
-            renderHome(container);
     }
-    window.scrollTo(0, 0); // Gulir ke atas
+    window.scrollTo(0, 0); 
 }
 
 // Menangani tombol kembali browser
 function handlePopState(event) {
     const view = event.state && event.state.view ? event.state.view : 'home';
-    // Gunakan navigate dengan pushState = false agar tidak membuat entri histori baru
+    
+    history.replaceState({ view: view }, '', `#${view}`);
+    
     navigate(view, false); 
 }
+
 
 // Render Kepala Halaman
 function renderHeader(headerData, orgName) {
@@ -168,10 +174,7 @@ function renderHome(container) {
     const data = appData.home;
     if (!data) return;
     
-    // Batasi 5 berita untuk tampilan awal home
     const latestBerita = data.berita_home.slice(0, 5); 
-    
-    // Tentukan lebar slider (misal 300% untuk 3 slide jika hanya ada 3 banner)
     const totalBannerSlides = data.banner.length;
     const sliderWidth = totalBannerSlides > 0 ? totalBannerSlides * 100 : 0;
     
@@ -179,9 +182,13 @@ function renderHome(container) {
         <div id="home-content">
             <div class="banner-slider-container">
                 <div id="banner-slider" class="banner-slider" style="width: ${sliderWidth}%;">
-                    ${data.banner.map(b => `
+                    ${data.banner.map((b, index) => `
                         <div class="banner-slide" style="width: ${100 / totalBannerSlides}%;">
-                            <img src="${b['poto-1'] || b['poto-2'] || b['poto-3'] || ''}" alt="Banner Image">
+                            <img 
+                                src="${b['poto-1'] || b['poto-2'] || b['poto-3'] || ''}" 
+                                alt="Banner Image"
+                                loading="${index === 0 ? 'eager' : 'lazy'}" 
+                            >
                         </div>
                     `).join('')}
                 </div>
@@ -192,7 +199,11 @@ function renderHome(container) {
                 ${latestBerita.map(berita => `
                     <div class="card-berita" data-id="${berita.id_berita}" onclick="showBeritaModal('${berita.id_berita}')">
                         <div class="berita-image-container">
-                             <img src="${berita.gambar_1 || berita.gambar_2 || berita.gambar_3 || ''}" alt="${berita.judul_berita}">
+                             <img 
+                                src="${berita.gambar_1 || berita.gambar_2 || berita.gambar_3 || ''}" 
+                                alt="${berita.judul_berita}"
+                                loading="lazy"
+                            >
                         </div>
                         <div class="card-body">
                             <small>${formatIDDate(berita.tanggal)}</small>
@@ -211,13 +222,11 @@ function renderHome(container) {
     }
 }
 
-// Render Halaman Kompetisi
 function renderKompetisi(container) {
     const data = appData.kompetisi || [];
-    // Filter dan urutkan kompetisi unik berdasarkan tanggal terbaru
     const uniqueKompetisiMap = data.reduce((acc, k) => {
         if (!acc[k.nama_kompetisi] || new Date(acc[k.nama_kompetisi].tanggal) < new Date(k.tanggal)) {
-            acc[k.nama_kompetisi] = k; // Simpan data pertandingan terbaru
+            acc[k.nama_kompetisi] = k; 
         }
         return acc;
     }, {});
@@ -241,7 +250,6 @@ function renderKompetisi(container) {
     `;
 }
 
-// Render Halaman Klub
 function renderKlub(container) {
     const data = appData.klub || [];
     
@@ -261,7 +269,6 @@ function renderKlub(container) {
     `;
 }
 
-// Render Halaman Tentang
 function renderTentang(container) {
     const profil = appData.tentang ? appData.tentang.profil : {};
     const struktur = appData.tentang ? appData.tentang.struktur_organisasi : {};
@@ -293,13 +300,9 @@ function renderTentang(container) {
     `;
 }
 
-
-// --- 3. Fungsi Pencarian dan Filter ---
-
 function filterContent(query) {
     const lowerQuery = query.toLowerCase();
     
-    // Hanya filter pada view yang aktif
     switch (currentView) {
         case 'home':
             filterBerita(lowerQuery);
@@ -317,7 +320,6 @@ function filterBerita(query) {
     const listContainer = document.getElementById('berita-list');
     if (!listContainer) return;
 
-    // Filter dari semua berita (tidak hanya 5 di home)
     const allBerita = appData.home.berita_home || [];
 
     const filteredBerita = allBerita.filter(b => 
@@ -328,7 +330,7 @@ function filterBerita(query) {
     listContainer.innerHTML = filteredBerita.map(berita => `
         <div class="card-berita" data-id="${berita.id_berita}" onclick="showBeritaModal('${berita.id_berita}')">
             <div class="berita-image-container">
-                 <img src="${berita.gambar_1 || berita.gambar_2 || berita.gambar_3 || ''}" alt="${berita.judul_berita}">
+                 <img src="${berita.gambar_1 || berita.gambar_2 || berita.gambar_3 || ''}" alt="${berita.judul_berita}" loading="lazy">
             </div>
             <div class="card-body">
                 <small>${formatIDDate(berita.tanggal)}</small>
@@ -369,20 +371,18 @@ function filterKlub(query) {
     });
 }
 
-
-// --- 4. Fungsi Modal dan Detail ---
-
 function closeModal() {
     document.getElementById('detail-modal').style.display = 'none';
     document.getElementById('modal-body').innerHTML = '';
+    // Hentikan interval slider saat modal ditutup
+    Object.values(currentSliderIntervals).forEach(clearInterval);
+    currentSliderIntervals = {};
 }
 
-// 4.1 Modal Berita
 function showBeritaModal(id) {
     const berita = (appData.home.berita_home || []).find(b => b.id_berita === id);
     if (!berita) return;
 
-    // Kumpulkan semua gambar yang ada
     const images = [berita.gambar_1, berita.gambar_2, berita.gambar_3].filter(img => img && img.startsWith('http'));
     let sliderHTML = '';
 
@@ -414,18 +414,15 @@ function showBeritaModal(id) {
     
     document.getElementById('detail-modal').style.display = 'block';
 
-    // Aktifkan slider jika ada > 1 gambar
     if (images.length > 1) {
         startSlider('berita-modal-slider', 'berita-slider-dots', images.length, true);
     }
 }
 
-
-// 4.2 Modal Kompetisi
 function showKompetisiModal(namaKompetisi) {
     const kompetisiData = (appData.kompetisi || [])
                             .filter(k => k.nama_kompetisi === namaKompetisi)
-                            .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal)); // Urutkan terbaru
+                            .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
 
     const listHTML = kompetisiData.map(k => `
         <li class="kompetisi-detail-card">
@@ -463,15 +460,13 @@ function showKompetisiModal(namaKompetisi) {
     document.getElementById('detail-modal').style.display = 'block';
 }
 
-// 4.3 Modal Klub
 function showKlubModal(idKlub) {
     const klub = (appData.klub || []).find(k => k.id_klub === idKlub);
     if (!klub) return;
 
-    // Filter kompetisi yang melibatkan klub ini
     const kompetisiKlub = (appData.kompetisi || [])
                             .filter(k => k.nama_klub1 === klub.nama_klub || k.nama_klub2 === klub.nama_klub)
-                            .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal)); // Urutkan terbaru
+                            .sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
     
     const kompetisiListHTML = kompetisiKlub.map(k => `
         <li class="kompetisi-detail-card">
@@ -516,37 +511,30 @@ function showKlubModal(idKlub) {
     document.getElementById('detail-modal').style.display = 'block';
 }
 
-
-// --- 5. Fungsi Slider (Banner dan Gambar Berita) ---
-
-let currentSlideIndex = {}; // Untuk melacak slide index untuk multiple sliders
-
 function startBannerSlider(sliderId, totalSlides) {
     if (totalSlides <= 1) return;
-    currentSlideIndex[sliderId] = 0;
+    let slideIndex = 0;
     const slider = document.getElementById(sliderId);
 
     function moveSlider() {
-        currentSlideIndex[sliderId]++;
-        if (currentSlideIndex[sliderId] >= totalSlides) {
-            currentSlideIndex[sliderId] = 0;
+        slideIndex++;
+        if (slideIndex >= totalSlides) {
+            slideIndex = 0;
         }
-        slider.style.transform = `translateX(-${currentSlideIndex[sliderId] * (100 / totalSlides)}%)`;
+        slider.style.transform = `translateX(-${slideIndex * (100 / totalSlides)}%)`;
     }
 
-    // Clear interval sebelumnya jika ada
-    if (slider.dataset.intervalId) {
-        clearInterval(slider.dataset.intervalId);
+    if (currentSliderIntervals[sliderId]) {
+        clearInterval(currentSliderIntervals[sliderId]);
     }
 
-    // Set interval 3 detik
     const intervalId = setInterval(moveSlider, 3000);
-    slider.dataset.intervalId = intervalId;
+    currentSliderIntervals[sliderId] = intervalId;
 }
 
 function startSlider(sliderId, dotsId, totalSlides, autoSlide = false) {
     if (totalSlides <= 1) return;
-    currentSlideIndex[sliderId] = 0;
+    let slideIndex = 0;
     const slider = document.getElementById(sliderId);
     const dotsContainer = document.getElementById(dotsId);
     const dots = dotsContainer ? dotsContainer.querySelectorAll('.dot') : [];
@@ -559,27 +547,25 @@ function startSlider(sliderId, dotsId, totalSlides, autoSlide = false) {
                 dot.classList.add('active');
             }
         });
-        currentSlideIndex[sliderId] = n;
+        slideIndex = n;
     }
 
     function moveSlider() {
-        let n = currentSlideIndex[sliderId] + 1;
+        let n = slideIndex + 1;
         if (n >= totalSlides) {
             n = 0;
         }
         showSlides(n);
     }
     
-    showSlides(0); // Tampilkan slide pertama
+    showSlides(0); 
     
-    // Clear interval sebelumnya jika ada
-    if (slider.dataset.intervalId) {
-        clearInterval(slider.dataset.intervalId);
+    if (currentSliderIntervals[sliderId]) {
+        clearInterval(currentSliderIntervals[sliderId]);
     }
 
     if (autoSlide) {
-        // Set interval 3 detik
         const intervalId = setInterval(moveSlider, 3000);
-        slider.dataset.intervalId = intervalId;
+        currentSliderIntervals[sliderId] = intervalId;
     }
 }
