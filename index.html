@@ -21,7 +21,6 @@
         }
         .active-nav-item {
             color: #1d4ed8; /* Blue-700 */
-            border-top: 2px solid #1d4ed8;
         }
         /* Style untuk Carousel */
         .carousel-item {
@@ -30,26 +29,11 @@
         }
         /* Memastikan track carousel bisa di-drag */
         #carousel-track {
-            touch-action: pan-y; /* Hanya geser vertikal secara default */
+            touch-action: pan-y; 
             cursor: grab;
         }
         #carousel-track:active {
              cursor: grabbing;
-        }
-        /* Style ringan untuk modal */
-        .modal {
-            transition: opacity 0.3s ease-in-out;
-        }
-        /* Custom scrollbar untuk performa */
-        ::-webkit-scrollbar {
-            width: 8px;
-        }
-        ::-webkit-scrollbar-thumb {
-            background: #cbd5e1;
-            border-radius: 4px;
-        }
-        ::-webkit-scrollbar-track {
-            background: #f1f1f1;
         }
         /* Animasi loading ringan */
         .spinner {
@@ -85,12 +69,12 @@
     </nav>
 
     <!-- Modal Container (Hidden by default) -->
-    <div id="modal-container" class="modal fixed inset-0 z-[1000] bg-black bg-opacity-70 flex items-center justify-center p-4 opacity-0 pointer-events-none">
+    <div id="modal-container" class="modal fixed inset-0 z-[1000] bg-black bg-opacity-70 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
         <!-- Modal content will be injected here -->
     </div>
 
     <!-- Session Timeout Modal -->
-    <div id="session-modal" class="modal fixed inset-0 z-[1001] bg-black bg-opacity-80 flex items-center justify-center p-4 opacity-0 pointer-events-none">
+    <div id="session-modal" class="modal fixed inset-0 z-[1001] bg-black bg-opacity-80 flex items-center justify-center p-4 opacity-0 pointer-events-none transition-opacity duration-300">
         <div class="bg-white rounded-xl shadow-2xl p-6 max-w-sm w-full text-center">
             <h3 class="text-xl font-bold text-red-600 mb-3">Sesi Berakhir</h3>
             <p class="text-gray-700 mb-6">Waktu melihat Anda telah habis (30 menit). Silakan muat ulang halaman untuk melanjutkan.</p>
@@ -100,51 +84,43 @@
 
     <script>
         // --- KONFIGURASI PENTING ---
-        // URL WEB APP ANDA YANG SUDAH DIDEPLOY
-        const API_URL = "https://script.google.com/macros/s/AKfycby3uWVoeBtbcY1oAjbkCNdRFT8ew7_VEtwe-WG8ka1OJqNUDj0GX4zdAwcI_nsexYNhFA/exec"; 
+        // GANTI DENGAN URL WEB APP APPS SCRIPT ANDA SETELAH DI-DEPLOY!
+        const API_URL = "GANTI DENGAN URL WEB APP APPS SCRIPT"; 
         const SESSION_DURATION_MS = 30 * 60 * 1000; // 30 menit
-        const MAX_CONTENT_LENGTH = 200; // Untuk ringkasan berita
+        const NEWS_SUMMARY_WORDS = 20; // 20 kata pertama untuk ringkasan berita
 
         // --- GLOBAL STATE ---
         let appData = {};
         let currentPage = 'Home';
         let sessionTimeout;
         let isDataLoaded = false;
-
-        // --- CAROUSEL DRAG/TOUCH STATE ---
+        
+        // Carousel State (Home Page Banner)
         let isDragging = false;
         let startX = 0;
         let currentTranslate = 0;
         let prevTranslate = 0;
-        let animationID;
         let currentCarouselIndex = 0;
         let carouselInterval;
-        let modalCarouselIndex = 0;
         let totalCarouselItems = 0;
         let carouselTrack;
+        
+        // Carousel State (Modal Image Slider)
+        let modalCarouselIndex = 0;
 
         // --- UTILITY FUNCTIONS ---
         
-        /**
-         * Mengubah data tanggal (Date object atau string YYYY-MM-DD) ke format Indonesia.
-         * Format: Hari, DD Bulan YYYY (contoh: Senin, 10 November 2025)
-         * @param {Date|string} dateInput Tanggal.
-         */
         const formatDate = (dateInput) => {
             if (!dateInput) return '-';
 
             let date;
-            if (dateInput instanceof Date) {
-                date = dateInput;
+            // Coba parsing YYYY-MM-DD format dari Apps Script
+            const parts = String(dateInput).split('-');
+            if (parts.length === 3) {
+                // Gunakan new Date(tahun, bulan-1, hari)
+                date = new Date(parts[0], parts[1] - 1, parts[2]);
             } else {
-                // Menerima format YYYY-MM-DD (dari spreadsheet)
-                const parts = String(dateInput).split('-');
-                if (parts.length === 3) {
-                    // Gunakan new Date(tahun, bulan-1, hari) untuk menghindari masalah zona waktu
-                    date = new Date(parts[0], parts[1] - 1, parts[2]);
-                } else {
-                    date = new Date(dateInput);
-                }
+                date = new Date(dateInput);
             }
 
             if (isNaN(date.getTime())) return '-';
@@ -160,24 +136,6 @@
             return date.toLocaleDateString('id-ID', options);
         };
 
-        /**
-         * Mengubah teks menjadi slug sederhana untuk URL.
-         * @param {string} text 
-         */
-        const slugify = (text) => {
-            return text.toString().toLowerCase()
-                .replace(/\s+/g, '-')
-                .replace(/[^\w\-]+/g, '')
-                .replace(/\-\-+/g, '-')
-                .replace(/^-+/, '')
-                .replace(/-+$/, '');
-        };
-
-        /**
-         * Memotong teks hingga jumlah kata tertentu, menambahkan elipsis.
-         * @param {string} text 
-         * @param {number} maxWords 
-         */
         const truncateText = (text, maxWords) => {
             if (!text) return '';
             const words = text.split(/\s+/);
@@ -186,24 +144,17 @@
             }
             return text;
         };
-
-        /**
-         * Mengambil data dari Apps Script API dengan penanganan loading.
-         * @param {string} route Rute API (cth: 'getInitialData').
-         * @param {Object} params Parameter query.
-         */
+        
         const fetchData = async (route, params = {}) => {
             const loadingElement = document.getElementById('loading');
             
-            // Tampilkan loading, tapi hanya setelah 100ms untuk menghindari kedipan pada respons cepat
             const loadingTimeout = setTimeout(() => {
                 loadingElement.classList.remove('hidden');
             }, 100);
 
             try {
-                // Pengecekan API_URL sebelum fetch (meskipun sudah diatur, ini sebagai fallback)
-                if (!API_URL || API_URL.includes("GANTI DENGAN URL WEB APP")) {
-                    throw new Error("API_URL belum diatur dengan URL Web App Apps Script yang valid.");
+                if (API_URL === "https://script.google.com/macros/s/AKfycbzAuQ82x0a6hHkoLmWXOi6RK31Y5QXYZtIddHVQxG1292bNx6uqsFeBjN2SXSr1teEi/exec") {
+                    throw new Error("API_URL belum diatur. Harap ganti placeholder dengan URL Web App Apps Script Anda.");
                 }
 
                 const url = new URL(API_URL);
@@ -223,11 +174,10 @@
                 }
             } catch (error) {
                 console.error('Fetch Error:', error);
-                // Tampilkan pesan error di UI jika gagal
                 document.getElementById('app-content').innerHTML = `
-                    <div class="p-8 text-center text-red-600 bg-red-100 m-4 rounded-lg">
+                    <div class="p-8 text-center text-red-600 bg-red-100 m-4 rounded-xl">
                         <p class="font-bold mb-2">Gagal Memuat Data Awal!</p>
-                        <p>Pastikan URL Web App Apps Script sudah di-deploy dengan benar dan diakses tanpa batasan.</p>
+                        <p>Pastikan URL Web App Apps Script sudah di-deploy, diakses tanpa batasan, dan API_URL sudah benar.</p>
                         <p class="text-sm mt-2">Detail Error: ${error.message}</p>
                     </div>
                 `;
@@ -247,23 +197,21 @@
             sessionTimeout = setTimeout(() => {
                 const sessionModal = document.getElementById('session-modal');
                 sessionModal.classList.remove('opacity-0', 'pointer-events-none');
+                sessionModal.classList.add('opacity-100');
             }, SESSION_DURATION_MS);
-
-            console.log(`Sesi dimulai, akan berakhir dalam ${SESSION_DURATION_MS / 60000} menit.`);
         };
 
         // --- RENDERING COMPONENTS ---
 
-        const renderHeader = (title = 'DASHBOARD') => {
+        const renderHeader = (title = 'ASKAB PSSI KEPULAUAN MENTAWAI') => {
             const headerData = appData.kepala_halaman || {};
-            // Menggunakan nilai default yang lebih informatif jika data tidak ada
             const logoPSSI = headerData.logo_pssi || 'https://placehold.co/50x50/3b82f6/ffffff?text=PSSI'; 
             const judulKepala = headerData.judul_kepala || 'ASKAB PSSI KEPULAUAN MENTAWAI';
             const logoASKAB = headerData.logo_askab || 'https://placehold.co/50x50/10b981/ffffff?text=ASKAB';
 
             return `
                 <header class="sticky top-0 bg-white p-3 border-b border-gray-200 shadow-md z-40">
-                    <div class="container mx-auto flex items-center justify-between">
+                    <div class="container mx-auto max-w-4xl flex items-center justify-between">
                         <img src="${logoPSSI}" alt="Logo PSSI" class="h-10 w-10 object-contain rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/50x50/3b82f6/ffffff?text=PSSI'" loading="lazy">
                         <h1 class="text-base sm:text-lg font-bold text-center text-gray-800 flex-grow mx-2 line-clamp-2">${judulKepala}</h1>
                         <img src="${logoASKAB}" alt="Logo ASKAB" class="h-10 w-10 object-contain rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/50x50/10b981/ffffff?text=ASKAB'" loading="lazy">
@@ -286,7 +234,7 @@
             navItems.forEach(item => {
                 const isActive = currentPage === item.name;
                 const button = document.createElement('button');
-                button.className = `flex flex-col items-center justify-center p-2 text-sm font-medium transition-colors duration-200 ${isActive ? 'text-blue-600 active-nav-item border-t-2 border-blue-600' : 'text-gray-500 hover:text-blue-600 hover:bg-gray-50'}`;
+                button.className = `flex flex-col items-center justify-center p-2 text-sm font-medium transition-colors duration-200 ${isActive ? 'text-blue-600 active-nav-item' : 'text-gray-500 hover:text-blue-600 hover:bg-gray-50'}`;
                 button.setAttribute('data-page', item.name);
                 button.innerHTML = `
                     <i data-lucide="${item.icon}" class="w-5 h-5"></i>
@@ -308,9 +256,9 @@
 
             let content = renderHeader('ASKAB PSSI KEPULAUAN MENTAWAI');
             content += `
-                <div class="p-4 space-y-6">
-                    <!-- Kolom Pencarian Berita -->
-                    <div class="sticky top-[58px] bg-white pt-2 pb-3 border-b border-gray-200 z-30">
+                <div class="p-4 space-y-6 max-w-4xl mx-auto">
+                    <!-- Kolom Pencarian Berita (Sticky) -->
+                    <div class="sticky top-[58px] bg-white pt-2 pb-3 border-b border-gray-200 z-30 -mx-4 px-4">
                         <div class="relative">
                             <i data-lucide="Search" class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"></i>
                             <input type="text" id="news-search" placeholder="Cari Berita (Judul/Isi)" 
@@ -344,7 +292,7 @@
                         ${bannerData.length === 0 ? '<div class="absolute inset-0 flex items-center justify-center text-gray-500">Tidak ada gambar banner.</div>' : ''}
                     </div>
 
-                    <!-- Ringkasan Berita (Tampilan Berita) -->
+                    <!-- Ringkasan Berita -->
                     <h2 class="text-xl font-bold text-gray-800">Berita Terbaru</h2>
                     <div id="news-list" class="space-y-4">
                         ${sortedNews.map(item => renderNewsCard(item)).join('')}
@@ -358,14 +306,12 @@
         };
 
         const renderNewsCard = (item) => {
-            // Pastikan item memiliki Judul_Berita dan isi_berita agar kartu muncul
             if (!item.Judul_Berita || !item.isi_berita) {
-                // Jangan tampilkan jika data utama hilang
                 return ''; 
             }
             
             const firstImage = item.gambar_1 || item.gambar_2 || item.gambar_3 || 'https://placehold.co/400x250/9ca3af/ffffff?text=NO+IMAGE';
-            const summary = truncateText(item.isi_berita || '', 20); // 20 kata pertama
+            const summary = truncateText(item.isi_berita || '', NEWS_SUMMARY_WORDS);
             const date = formatDate(item.tanggal);
 
             return `
@@ -381,18 +327,31 @@
                         <div class="w-full sm:w-2/3 p-4">
                             <p class="text-sm font-semibold text-blue-600 mb-1">${date}</p>
                             <h3 class="text-lg font-bold text-gray-800 mb-2 line-clamp-2">${item.Judul_Berita}</h3>
-                            <p class="text-gray-600 text-sm">${summary}</p>
+                            <p class="text-gray-600 text-sm line-clamp-3">${summary}</p>
                         </div>
                     </div>
                 </div>
             `;
         };
         
-        // --- Modal & Share Functions ---
+        // --- MODAL & SHARING ---
         
         const showNewsModal = async (id_berita) => {
+            // Tampilkan loading di modal sebelum fetching
+            document.getElementById('modal-container').innerHTML = `
+                <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl p-6 text-center">
+                    <div class="spinner mx-auto mb-3"></div>
+                    <p class="text-gray-700">Memuat detail berita...</p>
+                    <button class="absolute top-4 right-4 bg-red-600 text-white rounded-full p-2 z-50 hover:bg-red-700" onclick="hideModal()">
+                        <i data-lucide="X" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            `;
+            showModal();
+            
             const detail = await fetchData('getNewsDetails', { id: id_berita });
             if (!detail) {
+                 hideModal();
                  showNotification('Gagal memuat detail berita.', 'error');
                  return;
             }
@@ -421,19 +380,19 @@
                                     `).join('')}
                                 </div>
                                 ${images.length > 1 ? `
-                                    <button class="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-2 rounded-full" onclick="changeModalSlide(-1)">
+                                    <button class="absolute left-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70" onclick="changeModalSlide(-1)">
                                         <i data-lucide="ChevronLeft" class="w-6 h-6"></i>
                                     </button>
-                                    <button class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-2 rounded-full" onclick="changeModalSlide(1)">
+                                    <button class="absolute right-2 top-1/2 transform -translate-y-1/2 bg-black/50 text-white p-2 rounded-full hover:bg-black/70" onclick="changeModalSlide(1)">
                                         <i data-lucide="ChevronRight" class="w-6 h-6"></i>
                                     </button>
                                 ` : ''}
                             </div>
-                        ` : '<div class="h-10"></div>'}
+                        ` : '<div class="h-4"></div>'}
 
                         <p class="text-sm font-medium text-gray-500 mb-1">${date}</p>
                         <h2 class="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">${detail.Judul_Berita}</h2>
-                        <!-- Mengganti whitespace-pre-wrap agar lebih kompatibel dengan teks dari spreadsheet -->
+                        <!-- Mengganti newline ke <br> untuk tampilan teks yang sesuai dari spreadsheet -->
                         <div class="text-gray-700 leading-relaxed">${detail.isi_berita ? detail.isi_berita.replace(/\n/g, '<br>') : 'Konten berita tidak tersedia.'}</div>
                         
                         <!-- Share Button -->
@@ -447,13 +406,13 @@
             `;
             
             document.getElementById('modal-container').innerHTML = modalContent;
-            showModal();
             lucide.createIcons();
 
              // Logic untuk modal image slider
             const modalTrack = document.getElementById('modal-carousel-track');
             if (modalTrack) {
                 modalCarouselIndex = 0;
+                // Set initial state for modal slider
                 modalTrack.style.transition = 'transform 0.5s ease-in-out';
                 modalTrack.style.transform = `translateX(0)`;
             }
@@ -461,70 +420,72 @@
 
         const showModal = () => {
             const modal = document.getElementById('modal-container');
-            modal.classList.remove('opacity-0', 'pointer-events-none');
+            modal.classList.remove('pointer-events-none');
+            modal.classList.add('opacity-100');
         }
 
         const hideModal = () => {
             const modal = document.getElementById('modal-container');
+            modal.classList.remove('opacity-100');
             modal.classList.add('opacity-0', 'pointer-events-none');
             setTimeout(() => { modal.innerHTML = ''; }, 300); 
         }
 
         const shareNews = (id_berita) => {
-            // Menggunakan URL dasar (tanpa hash) untuk sharing, asumsikan hash tidak bekerja di semua browser/deployment
-            const newsLink = `${window.location.origin}${window.location.pathname}`; 
+            // Membuat link yang mengarahkan ke halaman Home dan menyalinnya
+            const newsLink = `${window.location.origin}${window.location.pathname}#home`; 
             
             const el = document.createElement('textarea');
             el.value = newsLink;
             document.body.appendChild(el);
             el.select();
             try {
+                // Menggunakan document.execCommand('copy') untuk kompatibilitas iframe
                 const successful = document.execCommand('copy');
-                const msg = successful ? 'Link berhasil disalin! (Anda dapat membagikan link ini, namun detail berita mungkin tidak langsung terbuka di semua browser)' : 'Gagal menyalin link.';
+                const msg = successful ? 'Link Berhasil Disalin!' : 'Gagal menyalin link.';
                 showNotification(msg, successful ? 'success' : 'error');
             } catch (err) {
-                console.error('Failed to copy text: ', err);
-                showNotification('Gagal menyalin link. Silakan salin manual: ' + newsLink, 'error');
+                showNotification('Gagal menyalin link. Silakan salin manual.', 'error');
             }
             document.body.removeChild(el);
         }
 
         let notificationTimeout;
         const showNotification = (message, type = 'info') => {
-            const container = document.body; // Menggunakan body agar notifikasi selalu di atas
             let notification = document.getElementById('notification-box');
             
             if (!notification) {
                 notification = document.createElement('div');
                 notification.id = 'notification-box';
-                container.appendChild(notification);
+                document.body.appendChild(notification);
             }
 
-            let bgColor = 'bg-blue-500';
-            if (type === 'success') bgColor = 'bg-green-500';
-            if (type === 'error') bgColor = 'bg-red-500';
+            let bgColor = 'bg-blue-600';
+            if (type === 'success') bgColor = 'bg-green-600';
+            if (type === 'error') bgColor = 'bg-red-600';
             
-            // Atur ulang kelas untuk memastikan notifikasi selalu di atas
-            notification.className = `fixed top-4 left-1/2 transform -translate-x-1/2 p-3 rounded-lg shadow-xl z-[1010] transition-opacity duration-300 opacity-0 text-white ${bgColor}`;
+            notification.className = `fixed top-4 left-1/2 transform -translate-x-1/2 p-3 rounded-lg shadow-xl z-[1010] transition-opacity duration-300 opacity-0 text-white font-medium ${bgColor}`;
             notification.textContent = message;
 
+            // Show
             notification.classList.remove('opacity-0');
             notification.classList.add('opacity-100');
 
             if (notificationTimeout) clearTimeout(notificationTimeout);
             notificationTimeout = setTimeout(() => {
+                // Hide
                 notification.classList.remove('opacity-100');
                 notification.classList.add('opacity-0');
-            }, 5000); // Tampilkan sedikit lebih lama
+            }, 5000); 
         }
 
-        // --- CAROUSEL LOGIC (Includes Drag/Swipe) ---
+        // --- CAROUSEL LOGIC ---
         
         const initCarousel = (totalItems) => {
             carouselTrack = document.getElementById('carousel-track');
             totalCarouselItems = totalItems;
             
-            if (!carouselTrack || totalItems < 1) {
+            if (!carouselTrack || totalItems < 2) {
                 if (carouselInterval) clearInterval(carouselInterval);
                 return;
             }
@@ -539,23 +500,20 @@
 
             // Auto-slide logic
             if (carouselInterval) clearInterval(carouselInterval);
-            if (totalItems > 1) {
-                carouselInterval = setInterval(() => {
-                    currentCarouselIndex = (currentCarouselIndex + 1) % totalItems;
-                    currentTranslate = currentCarouselIndex * -carouselTrack.clientWidth;
-                    prevTranslate = currentTranslate;
-                    carouselTrack.style.transition = 'transform 0.5s ease-in-out';
-                    setSliderPosition();
-                }, 3000);
-            }
+            carouselInterval = setInterval(() => {
+                currentCarouselIndex = (currentCarouselIndex + 1) % totalItems;
+                currentTranslate = currentCarouselIndex * -carouselTrack.clientWidth;
+                prevTranslate = currentTranslate;
+                carouselTrack.style.transition = 'transform 0.5s ease-in-out';
+                setSliderPosition();
+            }, 3000); // Bergerak setiap 3 detik
         };
         
         const startDrag = (event) => {
             if (totalCarouselItems <= 1) return;
-            // Jika diklik di dalam modal, jangan start drag
             if (event.target.closest('#modal-container')) return; 
 
-            if (event.type === 'touchstart') {
+            if (event.type.includes('touch')) {
                 startX = event.touches[0].clientX;
             } else { // mousedown
                 startX = event.clientX;
@@ -572,7 +530,7 @@
             if (!isDragging) return;
 
             let currentX;
-            if (event.type === 'touchmove') {
+            if (event.type.includes('touch')) {
                 currentX = event.touches[0].clientX;
             } else { // mousemove
                 currentX = event.clientX;
@@ -590,14 +548,13 @@
             
             const movedBy = currentTranslate - prevTranslate;
 
-            // Jika digeser lebih dari 20% lebar slide
+            // Threshold: 20% width
             if (movedBy < -carouselTrack.clientWidth / 5 && currentCarouselIndex < totalCarouselItems - 1) {
                 currentCarouselIndex++;
             } else if (movedBy > carouselTrack.clientWidth / 5 && currentCarouselIndex > 0) {
                 currentCarouselIndex--;
             }
             
-            // Atur posisi akhir berdasarkan indeks baru
             currentTranslate = currentCarouselIndex * -carouselTrack.clientWidth;
             prevTranslate = currentTranslate;
             
@@ -608,11 +565,6 @@
             initCarousel(totalCarouselItems);
             
             document.body.style.cursor = 'default';
-
-            // Mencegah klik saat drag berakhir (hanya untuk mouse events)
-            if (event.type === 'mouseup' && Math.abs(movedBy) > 5) {
-                event.preventDefault();
-            }
         };
 
         const animation = () => {
@@ -631,7 +583,8 @@
             const totalItems = track.children.length;
             
             modalCarouselIndex = (modalCarouselIndex + direction + totalItems) % totalItems;
-            track.style.transform = `translateX(-${modalCarouselIndex * 100}%)`;
+            // Setiap item carousel modal memiliki lebar 100%
+            track.style.transform = `translateX(-${modalCarouselIndex * 100}%)`; 
         };
         
         // --- RENDERING KOMPETISI PAGE ---
@@ -641,12 +594,12 @@
 
             let content = renderHeader('Kompetisi');
             content += `
-                <div class="p-4 space-y-6">
-                    <!-- Kolom Pencarian Kompetisi -->
-                    <div class="sticky top-[58px] bg-white pt-2 pb-3 border-b border-gray-200 z-30">
+                <div class="p-4 space-y-6 max-w-4xl mx-auto">
+                    <!-- Kolom Pencarian Kompetisi (Sticky) -->
+                    <div class="sticky top-[58px] bg-white pt-2 pb-3 border-b border-gray-200 z-30 -mx-4 px-4">
                         <div class="relative">
                             <i data-lucide="Search" class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"></i>
-                            <input type="text" id="competition-search" placeholder="Cari Kompetisi/Klub" 
+                            <input type="text" id="competition-search" placeholder="Cari Nama Kompetisi atau Nama Klub" 
                                 class="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition"
                                 onkeyup="filterContent('Kompetisi', this.value)">
                         </div>
@@ -664,16 +617,20 @@
         };
 
         const renderCompetitionGrid = (competitions) => {
-            if (competitions.length === 0) {
-                return '<p class="col-span-2 sm:col-span-3 text-center text-gray-500">Tidak ada data kompetisi.</p>';
+            // Mendapatkan daftar nama kompetisi unik dari hasil filter
+            const uniqueCompetitionNames = [...new Set(competitions
+                .map(c => c.nama_kompetisi)
+                .filter(name => name)
+                .map(name => String(name).trim()))
+            ]; 
+
+            if (uniqueCompetitionNames.length === 0) {
+                return '<p class="col-span-2 sm:col-span-3 text-center text-gray-500 p-8">Tidak ada data kompetisi yang ditemukan.</p>';
             }
 
-            // Hanya menampilkan nama kompetisi unik untuk grid
-            const uniqueCompetitions = [...new Set(competitions.map(c => c.nama_kompetisi).filter(name => name))]; // Filter nama kosong
-
-            return uniqueCompetitions.map(name => `
-                <div class="bg-white rounded-xl shadow-md p-4 flex items-center justify-center text-center h-24 sm:h-32 cursor-pointer transition hover:bg-blue-50 hover:shadow-lg"
-                    onclick="showCompetitionListModal('${name}')">
+            return uniqueCompetitionNames.map(name => `
+                <div class="bg-white rounded-xl shadow-md p-4 flex items-center justify-center text-center h-24 sm:h-32 cursor-pointer transition hover:bg-blue-100 hover:shadow-lg"
+                    onclick="showCompetitionListModal('${name.replace(/'/g, "\\'")}')">
                     <span class="text-base sm:text-lg font-semibold text-gray-800 line-clamp-2">${name}</span>
                 </div>
             `).join('');
@@ -683,6 +640,7 @@
             const allCompetitions = appData.kompetisi || [];
             const filteredCompetitions = allCompetitions.filter(c => c.nama_kompetisi === competitionName);
             
+            // Urutkan berdasarkan tanggal terbaru
             const sortedCompetitions = filteredCompetitions.sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
 
             let modalContent = `
@@ -711,7 +669,7 @@
             const club2Name = item.nama_klub2 || 'Klub 2';
 
             return `
-                <div class="bg-gray-50 rounded-lg p-4 shadow-sm border border-gray-200">
+                <div class="bg-gray-50 rounded-xl p-4 shadow-md border border-gray-200">
                     <div class="flex justify-between items-center mb-3 border-b pb-2">
                         <span class="text-sm font-semibold text-blue-600">${jenis}</span>
                         <span class="text-sm text-gray-500">${date} @ ${lokasi}</span>
@@ -721,7 +679,7 @@
                         <!-- Klub 1 -->
                         <div class="flex-1 space-y-1">
                             <img src="${item.logo_klub1 || 'https://placehold.co/60x60/f87171/ffffff?text=K1'}" alt="${club1Name}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/f87171/ffffff?text=K1'" loading="lazy">
-                            <p class="font-bold text-gray-800 text-sm sm:text-base">${club1Name}</p>
+                            <p class="font-bold text-gray-800 text-sm sm:text-base line-clamp-1">${club1Name}</p>
                             <p class="text-2xl font-extrabold text-red-600">${item.goal1 !== null && item.goal1 !== '' ? item.goal1 : '?'}</p>
                         </div>
                         
@@ -730,23 +688,23 @@
                         <!-- Klub 2 -->
                         <div class="flex-1 space-y-1">
                             <img src="${item.logo_klub2 || 'https://placehold.co/60x60/22c55e/ffffff?text=K2'}" alt="${club2Name}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/22c55e/ffffff?text=K2'" loading="lazy">
-                            <p class="font-bold text-gray-800 text-sm sm:text-base">${club2Name}</p>
+                            <p class="font-bold text-gray-800 text-sm sm:text-base line-clamp-1">${club2Name}</p>
                             <p class="text-2xl font-extrabold text-red-600">${item.goal2 !== null && item.goal2 !== '' ? item.goal2 : '?'}</p>
                         </div>
                     </div>
 
                     <!-- Detail Statistik -->
                     <div class="mt-4 pt-3 border-t border-gray-200 text-sm">
-                        <h4 class="font-semibold text-gray-700 mb-2">Statistik Pertandingan:</h4>
+                        <h4 class="font-semibold text-gray-700 mb-2">Statistik:</h4>
                         <div class="grid grid-cols-2 gap-y-1 gap-x-4">
                             <div class="flex items-center"><i data-lucide="Goal" class="w-4 h-4 mr-1 text-red-500"></i> Gol: ${item.goal1 || 0} (${item.Ket_goal1 || '-'})</div>
                             <div class="text-right flex items-center justify-end">Gol: ${item.goal2 || 0} (${item.Ket_goal2 || '-'}) <i data-lucide="Goal" class="w-4 h-4 ml-1 text-red-500"></i></div>
                             
-                            <div class="flex items-center"><i data-lucide="Square" class="w-4 h-4 mr-1 text-yellow-500"></i> Kuning: ${item.kartu_kuning1 || 0} (${item.ket_kartu_kuning1 || '-'})</div>
-                            <div class="text-right flex items-center justify-end">Kuning: ${item.kartu_kuning2 || 0} (${item.ket_kartu_kuning2 || '-'}) <i data-lucide="Square" class="w-4 h-4 ml-1 text-yellow-500"></i></div>
+                            <div class="flex items-center"><i data-lucide="Square" class="w-4 h-4 mr-1 text-yellow-500"></i> KK: ${item.kartu_kuning1 || 0} (${item.ket_kartu_kuning1 || '-'})</div>
+                            <div class="text-right flex items-center justify-end">KK: ${item.kartu_kuning2 || 0} (${item.ket_kartu_kuning2 || '-'}) <i data-lucide="Square" class="w-4 h-4 ml-1 text-yellow-500"></i></div>
                             
-                            <div class="flex items-center"><i data-lucide="Square" class="w-4 h-4 mr-1 text-red-700 fill-red-700"></i> Merah: ${item.kartu_merah1 || 0} (${item.ket_kartu_merah1 || '-'})</div>
-                            <div class="text-right flex items-center justify-end">Merah: ${item.kartu_merah2 || 0} (${item.ket_kartu_merah2 || '-'}) <i data-lucide="Square" class="w-4 h-4 ml-1 text-red-700 fill-red-700"></i></div>
+                            <div class="flex items-center"><i data-lucide="Square" class="w-4 h-4 mr-1 text-red-700 fill-red-700"></i> KM: ${item.kartu_merah1 || 0} (${item.ket_kartu_merah1 || '-'})</div>
+                            <div class="text-right flex items-center justify-end">KM: ${item.kartu_merah2 || 0} (${item.ket_kartu_merah2 || '-'}) <i data-lucide="Square" class="w-4 h-4 ml-1 text-red-700 fill-red-700"></i></div>
                         </div>
                     </div>
                 </div>
@@ -760,12 +718,12 @@
 
             let content = renderHeader('Klub Anggota');
             content += `
-                <div class="p-4 space-y-6">
-                    <!-- Kolom Pencarian Klub -->
-                    <div class="sticky top-[58px] bg-white pt-2 pb-3 border-b border-gray-200 z-30">
+                <div class="p-4 space-y-6 max-w-4xl mx-auto">
+                    <!-- Kolom Pencarian Klub (Sticky) -->
+                    <div class="sticky top-[58px] bg-white pt-2 pb-3 border-b border-gray-200 z-30 -mx-4 px-4">
                         <div class="relative">
                             <i data-lucide="Search" class="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"></i>
-                            <input type="text" id="club-search" placeholder="Cari Klub/Julukan" 
+                            <input type="text" id="club-search" placeholder="Cari Nama Klub/Julukan" 
                                 class="w-full p-3 pl-10 border border-gray-300 rounded-lg focus:ring-blue-500 focus:border-blue-500 transition"
                                 onkeyup="filterContent('Klub', this.value)">
                         </div>
@@ -783,15 +741,15 @@
         };
 
         const renderClubGrid = (clubs) => {
-            const filteredClubs = clubs.filter(club => club.nama_klub); // Hanya tampilkan klub dengan nama
+            const filteredClubs = clubs.filter(club => club.nama_klub);
             
             if (filteredClubs.length === 0) {
-                return '<p class="col-span-2 sm:col-span-4 text-center text-gray-500">Tidak ada data klub anggota.</p>';
+                return '<p class="col-span-2 sm:col-span-4 text-center text-gray-500 p-8">Tidak ada data klub anggota.</p>';
             }
 
             return filteredClubs.map(club => `
-                <div class="bg-white rounded-xl shadow-md p-4 text-center cursor-pointer transition hover:bg-green-50 hover:shadow-lg"
-                    onclick="showClubDetailModal('${club.nama_klub}')">
+                <div class="bg-white rounded-xl shadow-md p-4 text-center cursor-pointer transition hover:bg-green-100 hover:shadow-lg"
+                    onclick="showClubDetailModal('${club.nama_klub.replace(/'/g, "\\'")}')">
                     <img src="${club.logo_klub || 'https://placehold.co/80x80/10b981/ffffff?text=LOGO'}" alt="${club.nama_klub}" class="w-16 h-16 object-contain mx-auto mb-2 rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/80x80/10b981/ffffff?text=LOGO'" loading="lazy">
                     <p class="font-bold text-gray-800 text-sm line-clamp-1">${club.nama_klub}</p>
                     <p class="text-xs text-gray-500 line-clamp-1">"${club.julukan || '-'}"</p>
@@ -803,10 +761,21 @@
             const club = (appData.klub || []).find(c => c.nama_klub === clubName);
             if (!club) return;
             
-            // PANGGIL FUNGSI APPS SCRIPT
+            // Tampilkan modal loading awal
+            document.getElementById('modal-container').innerHTML = `
+                <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl p-6 text-center">
+                    <div class="spinner mx-auto mb-3"></div>
+                    <p class="text-gray-700">Memuat riwayat pertandingan untuk ${clubName}...</p>
+                    <button class="absolute top-4 right-4 bg-red-600 text-white rounded-full p-2 z-50 hover:bg-red-700" onclick="hideModal()">
+                        <i data-lucide="X" class="w-6 h-6"></i>
+                    </button>
+                </div>
+            `;
+            showModal();
+
+            // PANGGIL FUNGSI APPS SCRIPT untuk riwayat kompetisi
             const competitions = await fetchData('getCompetitionsByClub', { clubName: clubName });
             
-            // Sorting data berdasarkan tanggal terbaru
             const sortedCompetitions = (competitions || []).sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
 
             let modalContent = `
@@ -821,13 +790,13 @@
                         <div class="text-center sm:text-left">
                             <h2 class="text-2xl sm:text-3xl font-extrabold text-gray-900">${club.nama_klub}</h2>
                             <p class="text-lg font-semibold text-green-600">"${club.julukan || '-'}"</p>
-                            <p class="text-sm text-gray-500">Berdiri sejak: ${club.tanggal_berdiri || '-'} | Alamat: ${club.alamat || '-'}</p>
+                            <p class="text-sm text-gray-500">Berdiri sejak: ${formatDate(club.tanggal_berdiri) || '-'} | Alamat: ${club.alamat || '-'}</p>
                         </div>
                     </div>
                     
                     <!-- Detail Manajemen -->
                     <h3 class="text-xl font-bold text-gray-800 mb-3 mt-6">Manajemen & Staf</h3>
-                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-700 mb-6">
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-sm text-gray-700 mb-6 border-b pb-4">
                         <p><span class="font-semibold">Manajer:</span> ${club.manejer || '-'}</p>
                         <p><span class="font-semibold">Asisten Manajer:</span> ${club.asisten_manejer || '-'}</p>
                         <p><span class="font-semibold">Pelatih Kepala:</span> ${club.pelatih || '-'}</p>
@@ -837,16 +806,15 @@
                     </div>
 
                     <!-- Riwayat Kompetisi Klub -->
-                    <h3 class="text-xl font-bold text-gray-800 mb-4 mt-6 border-t pt-4">Riwayat Pertandingan Terakhir</h3>
+                    <h3 class="text-xl font-bold text-gray-800 mb-4 mt-4">Riwayat Pertandingan Terakhir</h3>
                     <div class="space-y-4">
                         ${sortedCompetitions.map(item => renderCompetitionCard(item)).join('')}
                     </div>
-                    ${sortedCompetitions.length === 0 ? `<p class="text-center text-gray-500">Klub ${clubName} belum memiliki riwayat pertandingan.</p>` : ''}
+                    ${sortedCompetitions.length === 0 ? `<p class="text-center text-gray-500 p-4">Klub ${clubName} belum memiliki riwayat pertandingan.</p>` : ''}
                 </div>
             `;
 
             document.getElementById('modal-container').innerHTML = modalContent;
-            showModal();
             lucide.createIcons();
         };
 
@@ -859,21 +827,21 @@
             
             let content = renderHeader('Tentang Kami');
             content += `
-                <div class="p-4 space-y-8">
+                <div class="p-4 space-y-8 max-w-4xl mx-auto">
                     
                     <!-- Profil Organisasi -->
                     <div class="bg-white p-6 rounded-xl shadow-lg border-t-4 border-blue-600">
                         <h2 class="text-2xl font-extrabold text-blue-600 mb-4">${profil.nama_organisasi || 'ASKAB PSSI KEPULAUAN MENTAWAI'}</h2>
-                        <p class="text-sm text-gray-500 mb-4">Didirikan sejak: ${profil.tanggal_berdiri || '-'}</p>
+                        <p class="text-sm text-gray-500 mb-4">Didirikan sejak: ${formatDate(profil.tanggal_berdiri) || '-'}</p>
                         
                         <div class="space-y-4">
                             <div>
-                                <h3 class="text-xl font-bold text-gray-800 border-b-2 pb-1 mb-2 flex items-center"><i data-lucide="Eye" class="w-5 h-5 mr-2 text-red-500"></i> Visi</h3>
+                                <h3 class="text-xl font-bold text-gray-800 border-b pb-1 mb-2 flex items-center"><i data-lucide="Eye" class="w-5 h-5 mr-2 text-red-500"></i> Visi</h3>
                                 <p class="text-gray-700 whitespace-pre-wrap">${profil.visi || 'Visi belum diisi.'}</p>
                             </div>
                             
                             <div>
-                                <h3 class="text-xl font-bold text-gray-800 border-b-2 pb-1 mb-2 flex items-center"><i data-lucide="Target" class="w-5 h-5 mr-2 text-green-500"></i> Misi</h3>
+                                <h3 class="text-xl font-bold text-gray-800 border-b pb-1 mb-2 flex items-center"><i data-lucide="Target" class="w-5 h-5 mr-2 text-green-500"></i> Misi</h3>
                                 <p class="text-gray-700 whitespace-pre-wrap">${profil.misi || 'Misi belum diisi.'}</p>
                             </div>
                         </div>
@@ -903,7 +871,7 @@
             return `
                 <div class="flex justify-between items-center border-b pb-2">
                     <span class="font-semibold text-gray-700">${role}:</span>
-                    <span class="text-lg font-medium text-gray-900">${name}</span>
+                    <span class="text-base font-medium text-gray-900">${name}</span>
                 </div>
             `;
         }
@@ -915,7 +883,7 @@
             const contentContainer = document.getElementById(page === 'Home' ? 'news-list' : page === 'Kompetisi' ? 'competition-grid' : 'club-grid');
             let htmlContent = '';
 
-            if (!contentContainer) return; // Guard clause jika container belum dirender
+            if (!contentContainer) return;
 
             if (page === 'Home') {
                 const newsData = appData.berita_home || [];
@@ -923,68 +891,51 @@
                     (item.Judul_Berita && item.Judul_Berita.toLowerCase().includes(normalizedQuery)) ||
                     (item.isi_berita && item.isi_berita.toLowerCase().includes(normalizedQuery))
                 );
+                // Sortir ulang hasil filter
+                filteredItems.sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
                 htmlContent = filteredItems.map(item => renderNewsCard(item)).join('');
+                
             } else if (page === 'Kompetisi') {
                 const competitions = appData.kompetisi || [];
-                // Filter di frontend berdasarkan nama kompetisi, klub 1, atau klub 2
                 const filteredCompetitions = competitions.filter(item => 
-                    (item.nama_kompetisi && item.nama_kompetisi.toLowerCase().includes(normalizedQuery)) ||
-                    (item.nama_klub1 && item.nama_klub1.toLowerCase().includes(normalizedQuery)) ||
-                    (item.nama_klub2 && item.nama_klub2.toLowerCase().includes(normalizedQuery)) ||
-                    (item.jenis_pertandingan && item.jenis_pertandingan.toLowerCase().includes(normalizedQuery))
+                    (item.nama_kompetisi && String(item.nama_kompetisi).toLowerCase().includes(normalizedQuery)) ||
+                    (item.nama_klub1 && String(item.nama_klub1).toLowerCase().includes(normalizedQuery)) ||
+                    (item.nama_klub2 && String(item.nama_klub2).toLowerCase().includes(normalizedQuery))
                 );
                 htmlContent = renderCompetitionGrid(filteredCompetitions);
             } else if (page === 'Klub') {
                 const clubs = appData.klub || [];
                 const filteredItems = clubs.filter(item => 
-                    (item.nama_klub && item.nama_klub.toLowerCase().includes(normalizedQuery)) ||
-                    (item.julukan && item.julukan.toLowerCase().includes(normalizedQuery)) ||
-                    (item.manejer && item.manejer.toLowerCase().includes(normalizedQuery)) ||
-                    (item.pelatih && item.pelatih.toLowerCase().includes(normalizedQuery))
+                    (item.nama_klub && String(item.nama_klub).toLowerCase().includes(normalizedQuery)) ||
+                    (item.julukan && String(item.julukan).toLowerCase().includes(normalizedQuery))
                 );
                 htmlContent = renderClubGrid(filteredItems);
             }
             
-            // Cek apakah hasil filter kosong
             if (htmlContent.trim() === '') {
-                // Tentukan jumlah kolom untuk pesan 'Tidak ada hasil'
-                let colSpan = page === 'Klub' ? 'col-span-4' : 'col-span-full';
-                if (page === 'Home') colSpan = 'col-span-full';
-
-                htmlContent = `<p class="${colSpan} text-center text-gray-500 p-8">Tidak ada hasil yang relevan untuk "${query}".</p>`;
+                htmlContent = `<p class="col-span-full text-center text-gray-500 p-8">Tidak ada hasil yang relevan untuk "${query}".</p>`;
             }
 
             contentContainer.innerHTML = htmlContent;
             lucide.createIcons();
-            
-            // Re-initialize carousel if on Home page
-            if (page === 'Home') {
-                 // Tidak perlu initCarousel lagi karena hanya memfilter daftar berita, bukan banner
-            }
         };
 
 
         // --- NAVIGATION & ROUTING ---
 
         const navigate = (pageName, skipHistory = false) => {
-            // Jika data belum dimuat, jangan navigasi
             if (!isDataLoaded) return; 
-            
-            // Jika halaman sama, tidak perlu navigasi
             if (currentPage === pageName) return; 
 
-            currentPage = pageName;
-            
-            if (!skipHistory) {
-                const newUrl = `#${slugify(pageName)}`;
-                // Hanya push state jika hash berubah
-                if (window.location.hash !== newUrl) {
-                     window.history.pushState({ page: pageName }, pageName, newUrl);
-                }
-            }
-            
             // Clear auto-slide interval saat pindah halaman
             if (carouselInterval) clearInterval(carouselInterval);
+            
+            currentPage = pageName;
+            
+            const newHash = `#${pageName.toLowerCase().replace(/\s+/g, '-')}`;
+            if (!skipHistory && window.location.hash !== newHash) {
+                 window.history.pushState({ page: pageName }, pageName, newHash);
+            }
             
             renderPage();
             renderNavBar();
@@ -992,10 +943,7 @@
         };
 
         const renderPage = () => {
-            if (!isDataLoaded) {
-                 // Hanya tampilkan pesan jika gagal memuat
-                 return; 
-            }
+            if (!isDataLoaded) return;
 
             switch (currentPage) {
                 case 'Kompetisi':
@@ -1016,51 +964,56 @@
 
         // --- INITIALIZATION ---
 
+        const getPageFromHash = (hash) => {
+             const routeMap = {
+                'home': 'Home',
+                'kompetisi': 'Kompetisi',
+                'klub': 'Klub',
+                'tentang': 'Tentang'
+            };
+            const normalizedHash = hash.slice(1).toLowerCase().replace(/-/g, ' ');
+            return routeMap[normalizedHash] || 'Home';
+        }
+
         const initializeApp = async () => {
+            // Tentukan halaman awal sebelum data dimuat
+            currentPage = getPageFromHash(window.location.hash);
+            renderPage(); // Render dengan data kosong/loading state
+            renderNavBar();
+            
             startSessionTimer();
 
-            // Tampilkan indikator loading awal saat fetch data
-            document.getElementById('app-content').innerHTML = `
-                <div class="p-8 text-center text-gray-500">
-                    <div class="spinner mx-auto mb-3"></div>
-                    <p>Mencoba mengambil data dari Google Sheet. Mohon tunggu...</p>
-                </div>
-            `;
-            
             const data = await fetchData('getInitialData');
             
             if (data) {
                 appData = data;
                 isDataLoaded = true;
                 
-                // Tentukan halaman awal berdasarkan hash URL atau default ke Home
-                const hash = window.location.hash.slice(1);
-                const routeMap = {
-                    'home': 'Home',
-                    'kompetisi': 'Kompetisi',
-                    'klub': 'Klub',
-                    'tentang': 'Tentang'
-                };
-                currentPage = routeMap[hash] || 'Home';
-                
-                renderPage();
+                // Render ulang dengan data yang dimuat
+                currentPage = getPageFromHash(window.location.hash);
+                renderPage(); 
                 renderNavBar();
+                
+                // Pastikan hash di URL sesuai dengan halaman yang dimuat, tapi jangan push history baru
+                const expectedHash = `#${currentPage.toLowerCase()}`;
+                if (window.location.hash !== expectedHash) {
+                    window.history.replaceState({ page: currentPage }, currentPage, expectedHash);
+                }
             } else {
-                // isDataLoaded tetap false, pesan error sudah ditampilkan di fetchData
+                // Biarkan pesan error di fetchData tetap terlihat
             }
 
         };
 
         // --- History API Listener (Mengatasi tombol back) ---
         window.addEventListener('popstate', (event) => {
-            if (!isDataLoaded) return; // Jangan navigasi jika data belum siap
+            if (!isDataLoaded) return;
 
-            if (event.state && event.state.page) {
-                navigate(event.state.page, true); 
-            } else {
-                if (currentPage !== 'Home') {
-                    navigate('Home', true);
-                }
+            // Navigasi ke halaman yang tersimpan di state atau berdasarkan hash
+            const page = event.state && event.state.page ? event.state.page : getPageFromHash(window.location.hash);
+            
+            if (page !== currentPage) {
+                 navigate(page, true); // True to skip pushing a new state
             }
         });
 
