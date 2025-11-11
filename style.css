@@ -125,21 +125,27 @@ body {
     position: relative;
     border-radius: 10px;
     box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    /* Tambahkan rasio aspek placeholder untuk loading yang lebih baik */
+    aspect-ratio: 16 / 9; /* Rasio umum untuk banner */
+    background-color: #e0e0e0; /* Placeholder abu-abu */
 }
 
 .banner-slider {
     display: flex;
     transition: transform 0.5s ease-in-out;
+    width: 100%;
+    height: 100%;
 }
 
 .banner-slide {
     flex-shrink: 0;
+    width: 100%;
 }
 
 .banner-slide img {
     width: 100%;
-    height: 180px; /* Tinggi tetap untuk mobile */
-    object-fit: cover;
+    height: 100%; /* Mengisi kontainer */
+    object-fit: cover; /* Penting untuk menjaga rasio aspek dan mengisi ruang */
     display: block;
 }
 
@@ -158,6 +164,7 @@ body {
     height: 150px;
     overflow: hidden;
     position: relative;
+    background-color: #e0e0e0; /* Placeholder */
 }
 
 .berita-image-container img {
@@ -531,10 +538,6 @@ body {
 
     .header-askab {
         right: 10px;
-    }
-
-    .banner-slide img {
-        height: 300px; /* Tinggi lebih besar untuk desktop */
     }
 
     /* Grid layout untuk Home di Desktop */
