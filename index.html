@@ -100,7 +100,7 @@
 
     <script>
         // --- KONFIGURASI PENTING ---
-        // GANTI DENGAN URL WEB APP ANDA YANG SUDAH DIDEPLOY
+        // PASTIKAN ANDA SUDAH MENGGANTI INI DENGAN URL WEB APP ANDA YANG SUDAH DIDEPLOY
         const API_URL = "https://script.google.com/macros/s/AKfycby3uWVoeBtbcY1oAjbkCNdRFT8ew7_VEtwe-WG8ka1OJqNUDj0GX4zdAwcI_nsexYNhFA/exec"; 
         const SESSION_DURATION_MS = 30 * 60 * 1000; // 30 menit
         const MAX_CONTENT_LENGTH = 200; // Untuk ringkasan berita
@@ -200,6 +200,11 @@
             }, 100);
 
             try {
+                // Pengecekan API_URL sebelum fetch
+                if (API_URL.includes("GANTI DENGAN URL WEB APP")) {
+                    throw new Error("API_URL belum diganti dengan URL Web App Apps Script yang valid.");
+                }
+
                 const url = new URL(API_URL);
                 url.searchParams.set('route', route);
                 for (const key in params) {
@@ -213,15 +218,16 @@
                     return data.data;
                 } else {
                     console.error('API Error:', data.message);
-                    return null;
+                    throw new Error(`Gagal dari server: ${data.message}`);
                 }
             } catch (error) {
                 console.error('Fetch Error:', error);
+                // Tampilkan pesan error di UI jika gagal
                 document.getElementById('app-content').innerHTML = `
                     <div class="p-8 text-center text-red-600 bg-red-100 m-4 rounded-lg">
-                        <p class="font-bold mb-2">Gagal Memuat Data!</p>
-                        <p>Pastikan Anda telah mengganti API_URL dengan URL Web App Apps Script yang benar dan Web App telah dideploy dengan akses 'Anyone'.</p>
-                        <p class="text-sm mt-2">Detail: ${error.message}</p>
+                        <p class="font-bold mb-2">Gagal Memuat Data Awal!</p>
+                        <p>Pastikan Anda telah mengganti API_URL di index.html dengan URL Web App Apps Script yang benar.</p>
+                        <p class="text-sm mt-2">Detail Error: ${error.message}</p>
                     </div>
                 `;
                 return null;
@@ -295,6 +301,12 @@
             const newsData = appData.berita_home || [];
             const bannerData = appData.banner || [];
             
+            // Tambahkan logging untuk memeriksa data berita
+            console.log("Data Berita yang dimuat:", newsData.length, "item.");
+            if (newsData.length > 0) {
+                 console.log("Contoh Berita Pertama:", newsData[0]);
+            }
+            
             const sortedNews = newsData.sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
 
             let content = renderHeader('ASKAB PSSI KEPULAUAN MENTAWAI');
@@ -348,6 +360,12 @@
         };
 
         const renderNewsCard = (item) => {
+            // Pastikan item memiliki Judul_Berita dan isi_berita agar kartu muncul
+            if (!item.Judul_Berita || !item.isi_berita) {
+                console.warn("Melewati Berita karena data Judul_Berita atau isi_berita kosong/null.", item);
+                return ''; // Jika data berita kosong, jangan render kartu
+            }
+            
             const firstImage = item.gambar_1 || item.gambar_2 || item.gambar_3 || 'https://placehold.co/400x250/9ca3af/ffffff?text=NO+IMAGE';
             const summary = truncateText(item.isi_berita || '', 20); // 20 kata pertama
             const date = formatDate(item.tanggal);
@@ -889,8 +907,8 @@
             if (page === 'Home') {
                 const newsData = appData.berita_home || [];
                 filteredItems = newsData.filter(item => 
-                    item.Judul_Berita.toLowerCase().includes(normalizedQuery) ||
-                    item.isi_berita.toLowerCase().includes(normalizedQuery)
+                    item.Judul_Berita && item.Judul_Berita.toLowerCase().includes(normalizedQuery) ||
+                    item.isi_berita && item.isi_berita.toLowerCase().includes(normalizedQuery)
                 );
                 htmlContent = filteredItems.map(item => renderNewsCard(item)).join('');
             } else if (page === 'Kompetisi') {
@@ -947,12 +965,9 @@
 
         const renderPage = () => {
             if (!isDataLoaded) {
-                document.getElementById('app-content').innerHTML = `
-                    <div class="h-64 flex items-center justify-center text-gray-500">
-                        <div class="spinner mr-3"></div> Memuat data awal...
-                    </div>
-                `;
-                return;
+                 // Tidak perlu menampilkan pesan loading di sini, sudah dihandle oleh fetchData
+                 // Jika fetchData gagal, pesan error sudah ditampilkan
+                 return; 
             }
 
             switch (currentPage) {
@@ -977,29 +992,46 @@
         const initializeApp = async () => {
             startSessionTimer();
 
+            // Tampilkan indikator loading awal saat fetch data
+            document.getElementById('app-content').innerHTML = `
+                <div class="p-8 text-center text-gray-500">
+                    <div class="spinner mx-auto mb-3"></div>
+                    <p>Mencoba mengambil data dari Google Sheet...</p>
+                </div>
+            `;
+            
             const data = await fetchData('getInitialData');
+            
             if (data) {
                 appData = data;
                 isDataLoaded = true;
+                
+                // Cek sekali lagi apakah data berita ada setelah loading
+                if (appData.berita_home && appData.berita_home.length > 0) {
+                     console.log("SUKSES: Berita telah dimuat. Jumlah:", appData.berita_home.length);
+                } else {
+                    console.log("INFO: Data berita kosong atau Apps Script gagal mengambilnya.");
+                }
+
+                const hash = window.location.hash.slice(1);
+                if (hash) {
+                    const routeMap = {
+                        'home': 'Home',
+                        'kompetisi': 'Kompetisi',
+                        'klub': 'Klub',
+                        'tentang': 'Tentang'
+                    };
+                    currentPage = routeMap[hash] || 'Home';
+                } else {
+                    currentPage = 'Home';
+                }
+                
+                renderPage();
+                renderNavBar();
             } else {
-                return; 
+                // Jika fetch gagal, pesan error sudah ditampilkan di fetchData, jadi jangan render halaman lain.
             }
 
-            const hash = window.location.hash.slice(1);
-            if (hash) {
-                const routeMap = {
-                    'home': 'Home',
-                    'kompetisi': 'Kompetisi',
-                    'klub': 'Klub',
-                    'tentang': 'Tentang'
-                };
-                currentPage = routeMap[hash] || 'Home';
-            } else {
-                currentPage = 'Home';
-            }
-            
-            renderPage();
-            renderNavBar();
         };
 
         // --- History API Listener (Mengatasi tombol back) ---
