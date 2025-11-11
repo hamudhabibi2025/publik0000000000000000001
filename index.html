@@ -100,7 +100,7 @@
 
     <script>
         // --- KONFIGURASI PENTING ---
-        // PASTIKAN ANDA SUDAH MENGGANTI INI DENGAN URL WEB APP ANDA YANG SUDAH DIDEPLOY
+        // URL WEB APP ANDA YANG SUDAH DIDEPLOY
         const API_URL = "https://script.google.com/macros/s/AKfycby3uWVoeBtbcY1oAjbkCNdRFT8ew7_VEtwe-WG8ka1OJqNUDj0GX4zdAwcI_nsexYNhFA/exec"; 
         const SESSION_DURATION_MS = 30 * 60 * 1000; // 30 menit
         const MAX_CONTENT_LENGTH = 200; // Untuk ringkasan berita
@@ -138,7 +138,7 @@
                 date = dateInput;
             } else {
                 // Menerima format YYYY-MM-DD (dari spreadsheet)
-                const parts = dateInput.split('-');
+                const parts = String(dateInput).split('-');
                 if (parts.length === 3) {
                     // Gunakan new Date(tahun, bulan-1, hari) untuk menghindari masalah zona waktu
                     date = new Date(parts[0], parts[1] - 1, parts[2]);
@@ -179,6 +179,7 @@
          * @param {number} maxWords 
          */
         const truncateText = (text, maxWords) => {
+            if (!text) return '';
             const words = text.split(/\s+/);
             if (words.length > maxWords) {
                 return words.slice(0, maxWords).join(' ') + '...';
@@ -200,9 +201,9 @@
             }, 100);
 
             try {
-                // Pengecekan API_URL sebelum fetch
-                if (API_URL.includes("GANTI DENGAN URL WEB APP")) {
-                    throw new Error("API_URL belum diganti dengan URL Web App Apps Script yang valid.");
+                // Pengecekan API_URL sebelum fetch (meskipun sudah diatur, ini sebagai fallback)
+                if (!API_URL || API_URL.includes("GANTI DENGAN URL WEB APP")) {
+                    throw new Error("API_URL belum diatur dengan URL Web App Apps Script yang valid.");
                 }
 
                 const url = new URL(API_URL);
@@ -226,7 +227,7 @@
                 document.getElementById('app-content').innerHTML = `
                     <div class="p-8 text-center text-red-600 bg-red-100 m-4 rounded-lg">
                         <p class="font-bold mb-2">Gagal Memuat Data Awal!</p>
-                        <p>Pastikan Anda telah mengganti API_URL di index.html dengan URL Web App Apps Script yang benar.</p>
+                        <p>Pastikan URL Web App Apps Script sudah di-deploy dengan benar dan diakses tanpa batasan.</p>
                         <p class="text-sm mt-2">Detail Error: ${error.message}</p>
                     </div>
                 `;
@@ -255,16 +256,17 @@
 
         const renderHeader = (title = 'DASHBOARD') => {
             const headerData = appData.kepala_halaman || {};
-            const logoPSSI = headerData.logo_pssi || 'https://placehold.co/50x50/cccccc/333333?text=PSSI';
-            const judulKepala = headerData.judul_kepala || title;
-            const logoASKAB = headerData.logo_askab || 'https://placehold.co/50x50/333333/ffffff?text=ASKAB';
+            // Menggunakan nilai default yang lebih informatif jika data tidak ada
+            const logoPSSI = headerData.logo_pssi || 'https://placehold.co/50x50/3b82f6/ffffff?text=PSSI'; 
+            const judulKepala = headerData.judul_kepala || 'ASKAB PSSI KEPULAUAN MENTAWAI';
+            const logoASKAB = headerData.logo_askab || 'https://placehold.co/50x50/10b981/ffffff?text=ASKAB';
 
             return `
                 <header class="sticky top-0 bg-white p-3 border-b border-gray-200 shadow-md z-40">
                     <div class="container mx-auto flex items-center justify-between">
-                        <img src="${logoPSSI}" alt="Logo PSSI" class="h-10 w-10 object-contain rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/50x50/cccccc/333333?text=PSSI'" loading="lazy">
-                        <h1 class="text-base sm:text-lg font-bold text-center text-gray-800 flex-grow mx-2">${judulKepala}</h1>
-                        <img src="${logoASKAB}" alt="Logo ASKAB" class="h-10 w-10 object-contain rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/50x50/333333/ffffff?text=ASKAB'" loading="lazy">
+                        <img src="${logoPSSI}" alt="Logo PSSI" class="h-10 w-10 object-contain rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/50x50/3b82f6/ffffff?text=PSSI'" loading="lazy">
+                        <h1 class="text-base sm:text-lg font-bold text-center text-gray-800 flex-grow mx-2 line-clamp-2">${judulKepala}</h1>
+                        <img src="${logoASKAB}" alt="Logo ASKAB" class="h-10 w-10 object-contain rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/50x50/10b981/ffffff?text=ASKAB'" loading="lazy">
                     </div>
                 </header>
             `;
@@ -301,12 +303,7 @@
             const newsData = appData.berita_home || [];
             const bannerData = appData.banner || [];
             
-            // Tambahkan logging untuk memeriksa data berita
-            console.log("Data Berita yang dimuat:", newsData.length, "item.");
-            if (newsData.length > 0) {
-                 console.log("Contoh Berita Pertama:", newsData[0]);
-            }
-            
+            // Sortir berita berdasarkan tanggal terbaru
             const sortedNews = newsData.sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
 
             let content = renderHeader('ASKAB PSSI KEPULAUAN MENTAWAI');
@@ -344,6 +341,7 @@
                                 `;
                             }).join('')}
                         </div>
+                        ${bannerData.length === 0 ? '<div class="absolute inset-0 flex items-center justify-center text-gray-500">Tidak ada gambar banner.</div>' : ''}
                     </div>
 
                     <!-- Ringkasan Berita (Tampilan Berita) -->
@@ -362,8 +360,8 @@
         const renderNewsCard = (item) => {
             // Pastikan item memiliki Judul_Berita dan isi_berita agar kartu muncul
             if (!item.Judul_Berita || !item.isi_berita) {
-                console.warn("Melewati Berita karena data Judul_Berita atau isi_berita kosong/null.", item);
-                return ''; // Jika data berita kosong, jangan render kartu
+                // Jangan tampilkan jika data utama hilang
+                return ''; 
             }
             
             const firstImage = item.gambar_1 || item.gambar_2 || item.gambar_3 || 'https://placehold.co/400x250/9ca3af/ffffff?text=NO+IMAGE';
@@ -394,7 +392,10 @@
         
         const showNewsModal = async (id_berita) => {
             const detail = await fetchData('getNewsDetails', { id: id_berita });
-            if (!detail) return;
+            if (!detail) {
+                 showNotification('Gagal memuat detail berita.', 'error');
+                 return;
+            }
 
             const images = [detail.gambar_1, detail.gambar_2, detail.gambar_3].filter(url => url && url.startsWith('http'));
             const date = formatDate(detail.tanggal);
@@ -432,7 +433,8 @@
 
                         <p class="text-sm font-medium text-gray-500 mb-1">${date}</p>
                         <h2 class="text-2xl sm:text-3xl font-extrabold text-gray-900 mb-4">${detail.Judul_Berita}</h2>
-                        <div class="text-gray-700 leading-relaxed whitespace-pre-wrap">${detail.isi_berita}</div>
+                        <!-- Mengganti whitespace-pre-wrap agar lebih kompatibel dengan teks dari spreadsheet -->
+                        <div class="text-gray-700 leading-relaxed">${detail.isi_berita ? detail.isi_berita.replace(/\n/g, '<br>') : 'Konten berita tidak tersedia.'}</div>
                         
                         <!-- Share Button -->
                         <div class="mt-6 border-t pt-4 flex justify-end">
@@ -469,14 +471,16 @@
         }
 
         const shareNews = (id_berita) => {
-            const newsLink = `${window.location.origin}${window.location.pathname}#news-${id_berita}`;
+            // Menggunakan URL dasar (tanpa hash) untuk sharing, asumsikan hash tidak bekerja di semua browser/deployment
+            const newsLink = `${window.location.origin}${window.location.pathname}`; 
+            
             const el = document.createElement('textarea');
             el.value = newsLink;
             document.body.appendChild(el);
             el.select();
             try {
                 const successful = document.execCommand('copy');
-                const msg = successful ? 'Link berhasil disalin!' : 'Gagal menyalin link.';
+                const msg = successful ? 'Link berhasil disalin! (Anda dapat membagikan link ini, namun detail berita mungkin tidak langsung terbuka di semua browser)' : 'Gagal menyalin link.';
                 showNotification(msg, successful ? 'success' : 'error');
             } catch (err) {
                 console.error('Failed to copy text: ', err);
@@ -487,13 +491,12 @@
 
         let notificationTimeout;
         const showNotification = (message, type = 'info') => {
-            const container = document.getElementById('app-content');
+            const container = document.body; // Menggunakan body agar notifikasi selalu di atas
             let notification = document.getElementById('notification-box');
             
             if (!notification) {
                 notification = document.createElement('div');
                 notification.id = 'notification-box';
-                notification.className = 'fixed top-4 left-1/2 transform -translate-x-1/2 p-3 rounded-lg shadow-xl z-[1010] transition-opacity duration-300 opacity-0';
                 container.appendChild(notification);
             }
 
@@ -501,6 +504,7 @@
             if (type === 'success') bgColor = 'bg-green-500';
             if (type === 'error') bgColor = 'bg-red-500';
             
+            // Atur ulang kelas untuk memastikan notifikasi selalu di atas
             notification.className = `fixed top-4 left-1/2 transform -translate-x-1/2 p-3 rounded-lg shadow-xl z-[1010] transition-opacity duration-300 opacity-0 text-white ${bgColor}`;
             notification.textContent = message;
 
@@ -511,7 +515,7 @@
             notificationTimeout = setTimeout(() => {
                 notification.classList.remove('opacity-100');
                 notification.classList.add('opacity-0');
-            }, 3000);
+            }, 5000); // Tampilkan sedikit lebih lama
         }
 
         // --- CAROUSEL LOGIC (Includes Drag/Swipe) ---
@@ -548,6 +552,8 @@
         
         const startDrag = (event) => {
             if (totalCarouselItems <= 1) return;
+            // Jika diklik di dalam modal, jangan start drag
+            if (event.target.closest('#modal-container')) return; 
 
             if (event.type === 'touchstart') {
                 startX = event.touches[0].clientX;
@@ -620,6 +626,8 @@
         
         const changeModalSlide = (direction) => {
             const track = document.getElementById('modal-carousel-track');
+            if (!track) return;
+
             const totalItems = track.children.length;
             
             modalCarouselIndex = (modalCarouselIndex + direction + totalItems) % totalItems;
@@ -661,7 +669,7 @@
             }
 
             // Hanya menampilkan nama kompetisi unik untuk grid
-            const uniqueCompetitions = [...new Set(competitions.map(c => c.nama_kompetisi))];
+            const uniqueCompetitions = [...new Set(competitions.map(c => c.nama_kompetisi).filter(name => name))]; // Filter nama kosong
 
             return uniqueCompetitions.map(name => `
                 <div class="bg-white rounded-xl shadow-md p-4 flex items-center justify-center text-center h-24 sm:h-32 cursor-pointer transition hover:bg-blue-50 hover:shadow-lg"
@@ -699,6 +707,8 @@
             const date = formatDate(item.tanggal);
             const jenis = item.jenis_pertandingan || 'Pertandingan';
             const lokasi = item.lokasi || 'Tidak diketahui';
+            const club1Name = item.nama_klub1 || 'Klub 1';
+            const club2Name = item.nama_klub2 || 'Klub 2';
 
             return `
                 <div class="bg-gray-50 rounded-lg p-4 shadow-sm border border-gray-200">
@@ -710,8 +720,8 @@
                     <div class="flex items-center justify-between text-center space-x-2">
                         <!-- Klub 1 -->
                         <div class="flex-1 space-y-1">
-                            <img src="${item.logo_klub1 || 'https://placehold.co/60x60/f87171/ffffff?text=K1'}" alt="${item.nama_klub1}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/f87171/ffffff?text=K1'" loading="lazy">
-                            <p class="font-bold text-gray-800 text-sm sm:text-base">${item.nama_klub1 || 'Klub 1'}</p>
+                            <img src="${item.logo_klub1 || 'https://placehold.co/60x60/f87171/ffffff?text=K1'}" alt="${club1Name}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/f87171/ffffff?text=K1'" loading="lazy">
+                            <p class="font-bold text-gray-800 text-sm sm:text-base">${club1Name}</p>
                             <p class="text-2xl font-extrabold text-red-600">${item.goal1 !== null && item.goal1 !== '' ? item.goal1 : '?'}</p>
                         </div>
                         
@@ -719,8 +729,8 @@
 
                         <!-- Klub 2 -->
                         <div class="flex-1 space-y-1">
-                            <img src="${item.logo_klub2 || 'https://placehold.co/60x60/22c55e/ffffff?text=K2'}" alt="${item.nama_klub2}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/22c55e/ffffff?text=K2'" loading="lazy">
-                            <p class="font-bold text-gray-800 text-sm sm:text-base">${item.nama_klub2 || 'Klub 2'}</p>
+                            <img src="${item.logo_klub2 || 'https://placehold.co/60x60/22c55e/ffffff?text=K2'}" alt="${club2Name}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/22c55e/ffffff?text=K2'" loading="lazy">
+                            <p class="font-bold text-gray-800 text-sm sm:text-base">${club2Name}</p>
                             <p class="text-2xl font-extrabold text-red-600">${item.goal2 !== null && item.goal2 !== '' ? item.goal2 : '?'}</p>
                         </div>
                     </div>
@@ -729,14 +739,14 @@
                     <div class="mt-4 pt-3 border-t border-gray-200 text-sm">
                         <h4 class="font-semibold text-gray-700 mb-2">Statistik Pertandingan:</h4>
                         <div class="grid grid-cols-2 gap-y-1 gap-x-4">
-                            <div class="flex items-center"><i data-lucide="Goal" class="w-4 h-4 mr-1 text-red-500"></i> Gol: ${item.goal1} (${item.Ket_goal1 || '-'})</div>
-                            <div class="text-right flex items-center justify-end">Gol: ${item.goal2} (${item.Ket_goal2 || '-'}) <i data-lucide="Goal" class="w-4 h-4 ml-1 text-red-500"></i></div>
+                            <div class="flex items-center"><i data-lucide="Goal" class="w-4 h-4 mr-1 text-red-500"></i> Gol: ${item.goal1 || 0} (${item.Ket_goal1 || '-'})</div>
+                            <div class="text-right flex items-center justify-end">Gol: ${item.goal2 || 0} (${item.Ket_goal2 || '-'}) <i data-lucide="Goal" class="w-4 h-4 ml-1 text-red-500"></i></div>
                             
-                            <div class="flex items-center"><i data-lucide="Square" class="w-4 h-4 mr-1 text-yellow-500"></i> Kuning: ${item.kartu_kuning1} (${item.ket_kartu_kuning1 || '-'})</div>
-                            <div class="text-right flex items-center justify-end">Kuning: ${item.kartu_kuning2} (${item.ket_kartu_kuning2 || '-'}) <i data-lucide="Square" class="w-4 h-4 ml-1 text-yellow-500"></i></div>
+                            <div class="flex items-center"><i data-lucide="Square" class="w-4 h-4 mr-1 text-yellow-500"></i> Kuning: ${item.kartu_kuning1 || 0} (${item.ket_kartu_kuning1 || '-'})</div>
+                            <div class="text-right flex items-center justify-end">Kuning: ${item.kartu_kuning2 || 0} (${item.ket_kartu_kuning2 || '-'}) <i data-lucide="Square" class="w-4 h-4 ml-1 text-yellow-500"></i></div>
                             
-                            <div class="flex items-center"><i data-lucide="Square" class="w-4 h-4 mr-1 text-red-700 fill-red-700"></i> Merah: ${item.kartu_merah1} (${item.ket_kartu_merah1 || '-'})</div>
-                            <div class="text-right flex items-center justify-end">Merah: ${item.kartu_merah2} (${item.ket_kartu_merah2 || '-'}) <i data-lucide="Square" class="w-4 h-4 ml-1 text-red-700 fill-red-700"></i></div>
+                            <div class="flex items-center"><i data-lucide="Square" class="w-4 h-4 mr-1 text-red-700 fill-red-700"></i> Merah: ${item.kartu_merah1 || 0} (${item.ket_kartu_merah1 || '-'})</div>
+                            <div class="text-right flex items-center justify-end">Merah: ${item.kartu_merah2 || 0} (${item.ket_kartu_merah2 || '-'}) <i data-lucide="Square" class="w-4 h-4 ml-1 text-red-700 fill-red-700"></i></div>
                         </div>
                     </div>
                 </div>
@@ -773,16 +783,18 @@
         };
 
         const renderClubGrid = (clubs) => {
-            if (clubs.length === 0) {
+            const filteredClubs = clubs.filter(club => club.nama_klub); // Hanya tampilkan klub dengan nama
+            
+            if (filteredClubs.length === 0) {
                 return '<p class="col-span-2 sm:col-span-4 text-center text-gray-500">Tidak ada data klub anggota.</p>';
             }
 
-            return clubs.map(club => `
+            return filteredClubs.map(club => `
                 <div class="bg-white rounded-xl shadow-md p-4 text-center cursor-pointer transition hover:bg-green-50 hover:shadow-lg"
                     onclick="showClubDetailModal('${club.nama_klub}')">
                     <img src="${club.logo_klub || 'https://placehold.co/80x80/10b981/ffffff?text=LOGO'}" alt="${club.nama_klub}" class="w-16 h-16 object-contain mx-auto mb-2 rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/80x80/10b981/ffffff?text=LOGO'" loading="lazy">
                     <p class="font-bold text-gray-800 text-sm line-clamp-1">${club.nama_klub}</p>
-                    <p class="text-xs text-gray-500 line-clamp-1">"${club.julukan}"</p>
+                    <p class="text-xs text-gray-500 line-clamp-1">"${club.julukan || '-'}"</p>
                 </div>
             `).join('');
         };
@@ -791,7 +803,7 @@
             const club = (appData.klub || []).find(c => c.nama_klub === clubName);
             if (!club) return;
             
-            // PANGGIL FUNGSI APPS SCRIPT YANG MEMERIKSA NAMA_KLUB1 ATAU NAMA_KLUB2
+            // PANGGIL FUNGSI APPS SCRIPT
             const competitions = await fetchData('getCompetitionsByClub', { clubName: clubName });
             
             // Sorting data berdasarkan tanggal terbaru
@@ -808,7 +820,7 @@
                         <img src="${club.logo_klub || 'https://placehold.co/100x100/10b981/ffffff?text=LOGO'}" alt="${club.nama_klub}" class="w-24 h-24 object-contain rounded-full mb-3 sm:mb-0 sm:mr-4" onerror="this.onerror=null;this.src='https://placehold.co/100x100/10b981/ffffff?text=LOGO'">
                         <div class="text-center sm:text-left">
                             <h2 class="text-2xl sm:text-3xl font-extrabold text-gray-900">${club.nama_klub}</h2>
-                            <p class="text-lg font-semibold text-green-600">"${club.julukan}"</p>
+                            <p class="text-lg font-semibold text-green-600">"${club.julukan || '-'}"</p>
                             <p class="text-sm text-gray-500">Berdiri sejak: ${club.tanggal_berdiri || '-'} | Alamat: ${club.alamat || '-'}</p>
                         </div>
                     </div>
@@ -901,21 +913,22 @@
         const filterContent = (page, query) => {
             const normalizedQuery = query.toLowerCase().trim();
             const contentContainer = document.getElementById(page === 'Home' ? 'news-list' : page === 'Kompetisi' ? 'competition-grid' : 'club-grid');
-            let filteredItems = [];
             let htmlContent = '';
+
+            if (!contentContainer) return; // Guard clause jika container belum dirender
 
             if (page === 'Home') {
                 const newsData = appData.berita_home || [];
-                filteredItems = newsData.filter(item => 
-                    item.Judul_Berita && item.Judul_Berita.toLowerCase().includes(normalizedQuery) ||
-                    item.isi_berita && item.isi_berita.toLowerCase().includes(normalizedQuery)
+                const filteredItems = newsData.filter(item => 
+                    (item.Judul_Berita && item.Judul_Berita.toLowerCase().includes(normalizedQuery)) ||
+                    (item.isi_berita && item.isi_berita.toLowerCase().includes(normalizedQuery))
                 );
                 htmlContent = filteredItems.map(item => renderNewsCard(item)).join('');
             } else if (page === 'Kompetisi') {
                 const competitions = appData.kompetisi || [];
                 // Filter di frontend berdasarkan nama kompetisi, klub 1, atau klub 2
                 const filteredCompetitions = competitions.filter(item => 
-                    item.nama_kompetisi.toLowerCase().includes(normalizedQuery) ||
+                    (item.nama_kompetisi && item.nama_kompetisi.toLowerCase().includes(normalizedQuery)) ||
                     (item.nama_klub1 && item.nama_klub1.toLowerCase().includes(normalizedQuery)) ||
                     (item.nama_klub2 && item.nama_klub2.toLowerCase().includes(normalizedQuery)) ||
                     (item.jenis_pertandingan && item.jenis_pertandingan.toLowerCase().includes(normalizedQuery))
@@ -923,33 +936,48 @@
                 htmlContent = renderCompetitionGrid(filteredCompetitions);
             } else if (page === 'Klub') {
                 const clubs = appData.klub || [];
-                filteredItems = clubs.filter(item => 
-                    item.nama_klub.toLowerCase().includes(normalizedQuery) ||
-                    item.julukan.toLowerCase().includes(normalizedQuery) ||
+                const filteredItems = clubs.filter(item => 
+                    (item.nama_klub && item.nama_klub.toLowerCase().includes(normalizedQuery)) ||
+                    (item.julukan && item.julukan.toLowerCase().includes(normalizedQuery)) ||
                     (item.manejer && item.manejer.toLowerCase().includes(normalizedQuery)) ||
                     (item.pelatih && item.pelatih.toLowerCase().includes(normalizedQuery))
                 );
                 htmlContent = renderClubGrid(filteredItems);
             }
             
-            if (htmlContent === '') {
-                htmlContent = `<p class="col-span-full text-center text-gray-500 p-8">Tidak ada hasil yang relevan untuk "${query}".</p>`;
+            // Cek apakah hasil filter kosong
+            if (htmlContent.trim() === '') {
+                // Tentukan jumlah kolom untuk pesan 'Tidak ada hasil'
+                let colSpan = page === 'Klub' ? 'col-span-4' : 'col-span-full';
+                if (page === 'Home') colSpan = 'col-span-full';
+
+                htmlContent = `<p class="${colSpan} text-center text-gray-500 p-8">Tidak ada hasil yang relevan untuk "${query}".</p>`;
             }
 
             contentContainer.innerHTML = htmlContent;
             lucide.createIcons();
+            
+            // Re-initialize carousel if on Home page
+            if (page === 'Home') {
+                 // Tidak perlu initCarousel lagi karena hanya memfilter daftar berita, bukan banner
+            }
         };
 
 
         // --- NAVIGATION & ROUTING ---
 
         const navigate = (pageName, skipHistory = false) => {
-            if (currentPage === pageName) return;
+            // Jika data belum dimuat, jangan navigasi
+            if (!isDataLoaded) return; 
+            
+            // Jika halaman sama, tidak perlu navigasi
+            if (currentPage === pageName) return; 
 
             currentPage = pageName;
             
             if (!skipHistory) {
                 const newUrl = `#${slugify(pageName)}`;
+                // Hanya push state jika hash berubah
                 if (window.location.hash !== newUrl) {
                      window.history.pushState({ page: pageName }, pageName, newUrl);
                 }
@@ -965,8 +993,7 @@
 
         const renderPage = () => {
             if (!isDataLoaded) {
-                 // Tidak perlu menampilkan pesan loading di sini, sudah dihandle oleh fetchData
-                 // Jika fetchData gagal, pesan error sudah ditampilkan
+                 // Hanya tampilkan pesan jika gagal memuat
                  return; 
             }
 
@@ -996,7 +1023,7 @@
             document.getElementById('app-content').innerHTML = `
                 <div class="p-8 text-center text-gray-500">
                     <div class="spinner mx-auto mb-3"></div>
-                    <p>Mencoba mengambil data dari Google Sheet...</p>
+                    <p>Mencoba mengambil data dari Google Sheet. Mohon tunggu...</p>
                 </div>
             `;
             
@@ -1006,36 +1033,28 @@
                 appData = data;
                 isDataLoaded = true;
                 
-                // Cek sekali lagi apakah data berita ada setelah loading
-                if (appData.berita_home && appData.berita_home.length > 0) {
-                     console.log("SUKSES: Berita telah dimuat. Jumlah:", appData.berita_home.length);
-                } else {
-                    console.log("INFO: Data berita kosong atau Apps Script gagal mengambilnya.");
-                }
-
+                // Tentukan halaman awal berdasarkan hash URL atau default ke Home
                 const hash = window.location.hash.slice(1);
-                if (hash) {
-                    const routeMap = {
-                        'home': 'Home',
-                        'kompetisi': 'Kompetisi',
-                        'klub': 'Klub',
-                        'tentang': 'Tentang'
-                    };
-                    currentPage = routeMap[hash] || 'Home';
-                } else {
-                    currentPage = 'Home';
-                }
+                const routeMap = {
+                    'home': 'Home',
+                    'kompetisi': 'Kompetisi',
+                    'klub': 'Klub',
+                    'tentang': 'Tentang'
+                };
+                currentPage = routeMap[hash] || 'Home';
                 
                 renderPage();
                 renderNavBar();
             } else {
-                // Jika fetch gagal, pesan error sudah ditampilkan di fetchData, jadi jangan render halaman lain.
+                // isDataLoaded tetap false, pesan error sudah ditampilkan di fetchData
             }
 
         };
 
         // --- History API Listener (Mengatasi tombol back) ---
         window.addEventListener('popstate', (event) => {
+            if (!isDataLoaded) return; // Jangan navigasi jika data belum siap
+
             if (event.state && event.state.page) {
                 navigate(event.state.page, true); 
             } else {
