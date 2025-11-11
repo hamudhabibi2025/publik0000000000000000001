@@ -299,7 +299,7 @@
                         </div>
                     </div>
 
-                    <!-- Ringkasan Berita -->
+                    <!-- Ringkasan Berita (Tampilan Berita) -->
                     <h2 class="text-xl font-bold text-gray-800">Berita Terbaru</h2>
                     <div id="news-list" class="space-y-4">
                         ${sortedNews.map(item => renderNewsCard(item)).join('')}
@@ -340,7 +340,6 @@
         // --- Modal & Share Functions ---
         
         const showNewsModal = async (id_berita) => {
-            // ... (Fungsi showNewsModal dan pendukungnya tetap sama seperti sebelumnya) ...
             const detail = await fetchData('getNewsDetails', { id: id_berita });
             if (!detail) return;
 
@@ -577,7 +576,6 @@
         // --- RENDERING KOMPETISI PAGE ---
 
         const renderKompetisi = () => {
-             // ... (Fungsi renderKompetisi dan pendukungnya tetap sama seperti sebelumnya) ...
             const competitions = appData.kompetisi || [];
 
             let content = renderHeader('Kompetisi');
@@ -609,6 +607,7 @@
                 return '<p class="col-span-2 sm:col-span-3 text-center text-gray-500">Tidak ada data kompetisi.</p>';
             }
 
+            // Hanya menampilkan nama kompetisi unik untuk grid
             const uniqueCompetitions = [...new Set(competitions.map(c => c.nama_kompetisi))];
 
             return uniqueCompetitions.map(name => `
@@ -694,7 +693,6 @@
         // --- RENDERING KLUB PAGE ---
 
         const renderKlub = () => {
-            // ... (Fungsi renderKlub dan pendukungnya tetap sama seperti sebelumnya) ...
             const clubs = appData.klub || [];
 
             let content = renderHeader('Klub Anggota');
@@ -740,10 +738,10 @@
             const club = (appData.klub || []).find(c => c.nama_klub === clubName);
             if (!club) return;
             
-            // 1. Ambil data kompetisi terkait dari Apps Script (sudah mencakup nama_klub1 & nama_klub2)
+            // PANGGIL FUNGSI APPS SCRIPT YANG MEMERIKSA NAMA_KLUB1 ATAU NAMA_KLUB2
             const competitions = await fetchData('getCompetitionsByClub', { clubName: clubName });
             
-            // 2. Sorting data berdasarkan tanggal terbaru
+            // Sorting data berdasarkan tanggal terbaru
             const sortedCompetitions = (competitions || []).sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
 
             let modalContent = `
@@ -791,7 +789,6 @@
         // --- RENDERING TENTANG PAGE ---
 
         const renderTentang = () => {
-            // ... (Fungsi renderTentang dan pendukungnya tetap sama seperti sebelumnya) ...
             const profil = appData.profil || {};
             const struktur = appData.struktur_organisasi || {};
             
@@ -849,7 +846,6 @@
         // --- FILTERING LOGIC (Search) ---
         
         const filterContent = (page, query) => {
-            // ... (Fungsi filterContent tetap sama seperti sebelumnya) ...
             const normalizedQuery = query.toLowerCase().trim();
             const contentContainer = document.getElementById(page === 'Home' ? 'news-list' : page === 'Kompetisi' ? 'competition-grid' : 'club-grid');
             let filteredItems = [];
@@ -864,20 +860,21 @@
                 htmlContent = filteredItems.map(item => renderNewsCard(item)).join('');
             } else if (page === 'Kompetisi') {
                 const competitions = appData.kompetisi || [];
-                filteredItems = competitions.filter(item => 
+                // Filter di frontend berdasarkan nama kompetisi, klub 1, atau klub 2
+                const filteredCompetitions = competitions.filter(item => 
                     item.nama_kompetisi.toLowerCase().includes(normalizedQuery) ||
-                    item.nama_klub1.toLowerCase().includes(normalizedQuery) ||
-                    item.nama_klub2.toLowerCase().includes(normalizedQuery) ||
-                    item.jenis_pertandingan.toLowerCase().includes(normalizedQuery)
+                    (item.nama_klub1 && item.nama_klub1.toLowerCase().includes(normalizedQuery)) ||
+                    (item.nama_klub2 && item.nama_klub2.toLowerCase().includes(normalizedQuery)) ||
+                    (item.jenis_pertandingan && item.jenis_pertandingan.toLowerCase().includes(normalizedQuery))
                 );
-                htmlContent = renderCompetitionGrid(filteredItems);
+                htmlContent = renderCompetitionGrid(filteredCompetitions);
             } else if (page === 'Klub') {
                 const clubs = appData.klub || [];
                 filteredItems = clubs.filter(item => 
                     item.nama_klub.toLowerCase().includes(normalizedQuery) ||
                     item.julukan.toLowerCase().includes(normalizedQuery) ||
-                    item.manejer.toLowerCase().includes(normalizedQuery) ||
-                    item.pelatih.toLowerCase().includes(normalizedQuery)
+                    (item.manejer && item.manejer.toLowerCase().includes(normalizedQuery)) ||
+                    (item.pelatih && item.pelatih.toLowerCase().includes(normalizedQuery))
                 );
                 htmlContent = renderClubGrid(filteredItems);
             }
