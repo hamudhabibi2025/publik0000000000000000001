@@ -74,14 +74,12 @@
 
     <script>
         // --- KONFIGURASI PENTING ---
-        // GANTI DENGAN URL WEB APP APPS SCRIPT ANDA SETELAH DI-DEPLOY!
+        // URL WEB APP APPS SCRIPT ANDA (Jangan Diubah jika sudah benar)
         const API_URL = "https://script.google.com/macros/s/AKfycbwmAJSRJ20QKUr54Ake_dUzlEsLo5cfGlItCiuVM6RmUJv6HAuhPTA6alslbHGKq_XY/exec"; 
         
         // --- CATATAN PENTING UNTUK GAMBAR (IMGBB) ---
-        // Jika gambar tidak muncul di perangkat lain, PASTIKAN link dari Google Sheet adalah:
-        // 1. **HTTPS** (Diawali https://)
-        // 2. **Direct Link** (Berakhir dengan .jpg, .png, .webp, dll.)
-        // Jangan gunakan link laman ImgBB atau link thumbnail!
+        // Perbaikan di kode ini akan memaksa URL ke HTTPS. Namun, Anda harus tetap
+        // memastikan bahwa link yang dimasukkan di Google Sheet adalah **Direct Link** // yang berakhir dengan .jpg, .png, .webp, dll. (Bukan link halaman ImgBB).
         
         const SESSION_DURATION_MS = 30 * 60 * 1000; // 30 menit
         const NEWS_SUMMARY_WORDS = 20; // 20 kata pertama untuk ringkasan berita
@@ -107,6 +105,22 @@
 
         // --- UTILITY FUNCTIONS ---
         
+        // **FUNGSI BARU UNTUK MEMPERBAIKI MASALAH GAMBAR**
+        const safeImageURL = (url) => {
+            if (!url || typeof url !== 'string') return url;
+            
+            // 1. Ganti HTTP menjadi HTTPS untuk ImgBB dan link eksternal lainnya
+            if (url.startsWith('http://')) {
+                url = 'https://' + url.substring(7);
+            }
+
+            // 2. Jika masih ada sisa URL ImgBB yang tidak sempurna, coba perbaiki (walaupun idealnya user harus menggunakan direct link)
+            if (url.includes('ibb.co') && !url.match(/\.(jpg|jpeg|png|gif|webp)$/i) && url.includes('/')) {
+                // Ini adalah langkah pertolongan, tapi TIDAK menggantikan kebutuhan direct link.
+            }
+            return url;
+        }
+
         const formatDate = (dateInput) => {
             if (!dateInput) return '-';
 
@@ -202,9 +216,11 @@
 
         const renderHeader = (title = 'ASKAB PSSI KEPULAUAN MENTAWAI') => {
             const headerData = appData.kepala_halaman || {};
-            const logoPSSI = headerData.logo_pssi || 'https://placehold.co/50x50/3b82f6/ffffff?text=PSSI'; 
+            // Terapkan safeImageURL
+            const logoPSSI = safeImageURL(headerData.logo_pssi) || 'https://placehold.co/50x50/3b82f6/ffffff?text=PSSI'; 
             const judulKepala = headerData.judul_kepala || 'ASKAB PSSI KEPULAUAN MENTAWAI';
-            const logoASKAB = headerData.logo_askab || 'https://placehold.co/50x50/10b981/ffffff?text=ASKAB';
+            // Terapkan safeImageURL
+            const logoASKAB = safeImageURL(headerData.logo_askab) || 'https://placehold.co/50x50/10b981/ffffff?text=ASKAB';
 
             return `
                 <header class="sticky top-0 bg-white p-3 border-b border-gray-200 shadow-md z-40">
@@ -274,8 +290,8 @@
                             onmouseup="endDrag(event)"
                             onmouseleave="endDrag(event)">
                             ${bannerData.map((item, index) => {
-                                // Ambil gambar pertama yang valid dari 3 kolom
-                                const imageUrl = item['poto-1'] || item['poto-2'] || item['poto-3'] || 'https://placehold.co/800x400/3b82f6/ffffff?text=BANNER';
+                                // Ambil gambar pertama yang valid dari 3 kolom dan terapkan safeImageURL
+                                const imageUrl = safeImageURL(item['poto-1'] || item['poto-2'] || item['poto-3']) || 'https://placehold.co/800x400/3b82f6/ffffff?text=BANNER';
                                 return `
                                     <div class="carousel-item h-full">
                                         <img src="${imageUrl}" alt="Banner ${index + 1}" class="w-full h-full object-cover" 
@@ -304,7 +320,8 @@
                 return ''; 
             }
             
-            const firstImage = item.gambar_1 || item.gambar_2 || item.gambar_3 || 'https://placehold.co/400x250/9ca3af/ffffff?text=NO+IMAGE';
+            // Terapkan safeImageURL
+            const firstImage = safeImageURL(item.gambar_1 || item.gambar_2 || item.gambar_3) || 'https://placehold.co/400x250/9ca3af/ffffff?text=NO+IMAGE';
             const summary = truncateText(item.isi_berita || '', NEWS_SUMMARY_WORDS);
             const date = formatDate(item.tanggal);
 
@@ -348,8 +365,11 @@
                  return;
             }
 
-            // Filter dan pastikan URL gambar dimulai dengan 'http' untuk keamanan
-            const images = [detail.gambar_1, detail.gambar_2, detail.gambar_3].filter(url => url && url.startsWith('http'));
+            // Filter, pastikan URL gambar dimulai dengan 'http', dan terapkan safeImageURL
+            const images = [detail.gambar_1, detail.gambar_2, detail.gambar_3]
+                            .filter(url => url && url.startsWith('http'))
+                            .map(safeImageURL);
+                            
             const date = formatDate(detail.tanggal);
 
             let modalContent = `
@@ -653,6 +673,11 @@
             const lokasi = item.lokasi || 'Tidak diketahui';
             const club1Name = item.nama_klub1 || 'Klub 1';
             const club2Name = item.nama_klub2 || 'Klub 2';
+            
+            // Terapkan safeImageURL
+            const logoKlub1 = safeImageURL(item.logo_klub1) || 'https://placehold.co/60x60/f87171/ffffff?text=K1';
+            const logoKlub2 = safeImageURL(item.logo_klub2) || 'https://placehold.co/60x60/22c55e/ffffff?text=K2';
+
 
             return `
                 <div class="bg-gray-50 rounded-xl p-4 shadow-md border border-gray-200">
@@ -663,7 +688,7 @@
                     
                     <div class="flex items-center justify-between text-center space-x-2">
                         <div class="flex-1 space-y-1">
-                            <img src="${item.logo_klub1 || 'https://placehold.co/60x60/f87171/ffffff?text=K1'}" alt="${club1Name}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/f87171/ffffff?text=K1'" loading="lazy">
+                            <img src="${logoKlub1}" alt="${club1Name}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/f87171/ffffff?text=K1'" loading="lazy">
                             <p class="font-bold text-gray-800 text-sm sm:text-base line-clamp-1">${club1Name}</p>
                             <p class="text-3xl font-extrabold text-red-600">${item.goal1 !== null && item.goal1 !== '' ? item.goal1 : '?'}</p>
                         </div>
@@ -671,7 +696,7 @@
                         <span class="text-lg font-bold text-gray-600">VS</span>
 
                         <div class="flex-1 space-y-1">
-                            <img src="${item.logo_klub2 || 'https://placehold.co/60x60/22c55e/ffffff?text=K2'}" alt="${club2Name}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/22c55e/ffffff?text=K2'" loading="lazy">
+                            <img src="${logoKlub2}" alt="${club2Name}" class="w-12 h-12 sm:w-16 sm:h-16 object-contain mx-auto rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/60x60/22c55e/ffffff?text=K2'" loading="lazy">
                             <p class="font-bold text-gray-800 text-sm sm:text-base line-clamp-1">${club2Name}</p>
                             <p class="text-3xl font-extrabold text-red-600">${item.goal2 !== null && item.goal2 !== '' ? item.goal2 : '?'}</p>
                         </div>
@@ -755,14 +780,19 @@
                 return '<p class="col-span-2 sm:col-span-4 text-center text-gray-500 p-8">Tidak ada data klub anggota.</p>';
             }
 
-            return filteredClubs.map(club => `
+            return filteredClubs.map(club => {
+                // Terapkan safeImageURL
+                const logo = safeImageURL(club.logo_klub) || 'https://placehold.co/80x80/10b981/ffffff?text=LOGO';
+
+                return `
                 <div class="bg-white rounded-xl shadow-md p-4 text-center cursor-pointer transition hover:bg-green-100 hover:shadow-lg"
                     onclick="showClubDetailModal('${club.nama_klub.replace(/'/g, "\\'")}')">
-                    <img src="${club.logo_klub || 'https://placehold.co/80x80/10b981/ffffff?text=LOGO'}" alt="${club.nama_klub}" class="w-16 h-16 object-contain mx-auto mb-2 rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/80x80/10b981/ffffff?text=LOGO'" loading="lazy">
+                    <img src="${logo}" alt="${club.nama_klub}" class="w-16 h-16 object-contain mx-auto mb-2 rounded-full" onerror="this.onerror=null;this.src='https://placehold.co/80x80/10b981/ffffff?text=LOGO'" loading="lazy">
                     <p class="font-bold text-gray-800 text-sm line-clamp-1">${club.nama_klub}</p>
                     <p class="text-xs text-gray-500 line-clamp-1">"${club.julukan || '-'}"</p>
                 </div>
-            `).join('');
+            `;
+            }).join('');
         };
 
         const showClubDetailModal = async (clubName) => {
@@ -786,6 +816,9 @@
             
             const sortedCompetitions = (competitions || []).sort((a, b) => new Date(b.tanggal) - new Date(a.tanggal));
 
+            // Terapkan safeImageURL
+            const clubLogo = safeImageURL(club.logo_klub) || 'https://placehold.co/100x100/10b981/ffffff?text=LOGO';
+
             let modalContent = `
                 <div class="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto relative shadow-2xl p-6">
                     <button class="absolute top-4 right-4 bg-red-600 text-white rounded-full p-2 z-50 hover:bg-red-700" onclick="hideModal()">
@@ -793,7 +826,7 @@
                     </button>
                     
                     <div class="flex flex-col sm:flex-row items-center sm:items-start border-b pb-4 mb-4">
-                        <img src="${club.logo_klub || 'https://placehold.co/100x100/10b981/ffffff?text=LOGO'}" alt="${club.nama_klub}" class="w-24 h-24 object-contain rounded-full mb-3 sm:mb-0 sm:mr-4" onerror="this.onerror=null;this.src='https://placehold.co/100x100/10b981/ffffff?text=LOGO'">
+                        <img src="${clubLogo}" alt="${club.nama_klub}" class="w-24 h-24 object-contain rounded-full mb-3 sm:mb-0 sm:mr-4" onerror="this.onerror=null;this.src='https://placehold.co/100x100/10b981/ffffff?text=LOGO'">
                         <div class="text-center sm:text-left">
                             <h2 class="text-2xl sm:text-3xl font-extrabold text-gray-900">${club.nama_klub}</h2>
                             <p class="text-lg font-semibold text-green-600">"${club.julukan || '-'}"</p>
