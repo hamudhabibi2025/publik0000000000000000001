@@ -94,7 +94,8 @@
         let carouselInterval;
         let totalCarouselItems = 0;
         let carouselTrack;
-        
+        let animationID; // Dibuat global untuk di-cancel
+
         // Carousel State (Modal Image Slider)
         let modalCarouselIndex = 0;
 
@@ -139,6 +140,7 @@
             if (!url || typeof url !== 'string') return url;
             // Memperbaiki link ImgBB yang mungkin salah format dari Apps Script (i.ibb.co/ menjadi i.ibb.co.com/)
             if (url.includes('i.ibb.co/') && !url.includes('i.ibb.co.com/')) {
+                // Hati-hati dengan HTTPS. Pastikan protocol tetap ada.
                 return url.replace('i.ibb.co/', 'i.ibb.co.com/');
             }
             return url;
@@ -484,23 +486,34 @@
             currentTranslate = 0;
             prevTranslate = 0;
             currentCarouselIndex = 0;
+            
+            // 1. Matikan transisi (hanya untuk reset posisi instan)
             carouselTrack.style.transition = 'none';
-            setSliderPosition();
+            setSliderPosition(); // Reset ke slide 0
 
-            // Auto-slide logic
+            // 2. Aktifkan transisi auto-slide. 
+            // Menggunakan setTimeout 0ms untuk memastikan transisi 'none' diproses browser terlebih dahulu.
+            setTimeout(() => {
+                carouselTrack.style.transition = 'transform 0.5s ease-in-out';
+            }, 0); 
+
+            // 3. Auto-slide logic
             if (carouselInterval) clearInterval(carouselInterval);
             carouselInterval = setInterval(() => {
                 currentCarouselIndex = (currentCarouselIndex + 1) % totalItems;
                 currentTranslate = currentCarouselIndex * -carouselTrack.clientWidth;
                 prevTranslate = currentTranslate;
-                carouselTrack.style.transition = 'transform 0.5s ease-in-out';
-                setSliderPosition();
+                // Transisi sudah diatur di luar interval (poin 2), jadi dihapus dari sini.
+                setSliderPosition(); 
             }, 3000); // Bergerak setiap 3 detik
         };
         
         const startDrag = (event) => {
             if (totalCarouselItems <= 1) return;
             if (event.target.closest('#modal-container')) return; 
+
+            // Clear auto-slide interval saat drag dimulai
+            if (carouselInterval) clearInterval(carouselInterval);
 
             if (event.type.includes('touch')) {
                 startX = event.touches[0].clientX;
@@ -509,8 +522,7 @@
                 document.body.style.cursor = 'grabbing';
             }
             isDragging = true;
-            carouselTrack.style.transition = 'none';
-            if (carouselInterval) clearInterval(carouselInterval);
+            carouselTrack.style.transition = 'none'; // Matikan transisi saat drag
             
             animationID = requestAnimationFrame(animation);
         };
@@ -547,6 +559,7 @@
             currentTranslate = currentCarouselIndex * -carouselTrack.clientWidth;
             prevTranslate = currentTranslate;
             
+            // Aktifkan transisi untuk pergeseran akhir
             carouselTrack.style.transition = 'transform 0.3s ease-in-out';
             setSliderPosition();
             
